@@ -1,0 +1,56 @@
+version: "3.8"
+
+services:
+  node1:
+    build: .
+    container_name: node1
+    ports:
+      - "5001:5000"
+    volumes:
+      - client1_data:/storage
+    environment:
+      - LEDGER_PATH=/storage
+      - NODE_ID=node1
+      - PEERS=http://node2:5000,http://node3:5000
+    networks:
+      - ledger_net
+    restart: unless-stopped
+
+  node2:
+    build: .
+    container_name: node2
+    ports:
+      - "5002:5000"
+    volumes:
+      - client2_data:/storage
+    environment:
+      - LEDGER_PATH=/storage
+      - NODE_ID=node2
+      - PEERS=http://node1:5000,http://node3:5000
+    networks:
+      - ledger_net
+    restart: unless-stopped
+
+  node3:
+    build: .
+    container_name: node3
+    ports:
+      - "5003:5000"
+    volumes:
+      - client3_data:/storage
+    environment:
+      - LEDGER_PATH=/storage
+      - NODE_ID=node3
+      - PEERS=http://node1:5000,http://node2:5000
+    networks:
+      - ledger_net
+    restart: unless-stopped
+
+volumes:
+  client1_data:
+  client2_data:
+  client3_data:
+
+networks:
+  ledger_net:
+    driver: bridge

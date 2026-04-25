@@ -99,12 +99,12 @@ CloudSystem_Midterm_Project/
 ## 分階段執行計畫
 
 ### Phase 1 — 帳本核心 + Docker 骨架
-- [ ] `ledger/block.py`：區塊讀寫、SHA256、創世區塊建立
-- [ ] `ledger/transaction.py`：轉帳邏輯、餘額掃描、`fcntl.flock`
-- [ ] `ledger/chain.py`：完整性驗證
-- [ ] `Dockerfile`
-- [ ] `docker-compose.yml`（三節點獨立 volume，ports 5001/5002/5003）
-- [ ] 驗證：三個 container 各自寫各自的帳本，互不干擾
+- [x] `ledger/block.py`：區塊讀寫、SHA256、創世區塊建立
+- [x] `ledger/transaction.py`：轉帳邏輯、餘額掃描、`fcntl.flock`
+- [x] `ledger/chain.py`：完整性驗證
+- [x] `Dockerfile`
+- [x] `docker-compose.yml`（三節點獨立 volume，ports 5001/5002/5003）
+- [x] 驗證：三個 container 各自寫各自的帳本，互不干擾
 
 ### Phase 2 — Flask API + 節點間同步
 - [ ] `app.py` 基礎路由（/api/transfer、/api/balance、/api/blocks）
