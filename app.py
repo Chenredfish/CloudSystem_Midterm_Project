@@ -4,7 +4,8 @@ import logging
 from functools import wraps
 
 import requests
-from flask import Flask, jsonify, request, session
+from flask import Flask, jsonify, request, session, send_from_directory
+from flask_cors import CORS
 
 from ledger import (
     init_ledger, get_all_blocks, read_block, get_block_count,
@@ -24,8 +25,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
-app = Flask(__name__)
+app = Flask(__name__, static_folder=None)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+CORS(app, supports_credentials=True)
 
 NODE_ID = os.environ.get("NODE_ID", "unknown")
 PEERS = [p.strip() for p in os.environ.get("PEERS", "").split(",") if p.strip()]
@@ -311,6 +313,23 @@ def sync_block():
 @app.route("/sync/blocks")
 def sync_blocks():
     return jsonify(get_all_blocks())
+
+# ---------------------------------------------------------------------------
+# React static serve (activated after npm run build)
+# ---------------------------------------------------------------------------
+_REACT_BUILD = os.path.join(os.path.dirname(__file__), "frontend", "build")
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_react(path):
+    if path.startswith("api/") or path.startswith("sync/") or path == "health":
+        return jsonify({"error": "Not found"}), 404
+    if os.path.exists(_REACT_BUILD):
+        target = os.path.join(_REACT_BUILD, path)
+        if path and os.path.exists(target):
+            return send_from_directory(_REACT_BUILD, path)
+        return send_from_directory(_REACT_BUILD, "index.html")
+    return jsonify({"error": "Frontend not built"}), 404
 
 # ---------------------------------------------------------------------------
 # Health
