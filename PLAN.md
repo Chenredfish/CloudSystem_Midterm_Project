@@ -107,12 +107,12 @@ CloudSystem_Midterm_Project/
 - [x] 驗證：三個 container 各自寫各自的帳本，互不干擾
 
 ### Phase 2 — Flask API + 節點間同步
-- [ ] `app.py` 基礎路由（/api/transfer、/api/balance、/api/blocks）
-- [ ] `/sync/block`、`/sync/blocks` 端點
-- [ ] 寫入後自動推送給其他兩節點的邏輯
-- [ ] `/api/chain/verify`、`/api/chain/compare`、`/api/chain/repair`
-- [ ] 多數決修復邏輯
-- [ ] 輕量 session auth（hardcode 兩組帳密即可）
+- [x] `app.py` 基礎路由（/api/transfer、/api/balance、/api/blocks）
+- [x] `/sync/block`、`/sync/blocks` 端點
+- [x] 寫入後自動推送給其他兩節點的邏輯
+- [x] `/api/chain/verify`、`/api/chain/compare`、`/api/chain/repair`
+- [x] 多數決修復邏輯（使用 computed hash，可偵測竄改內容但未改 Hashcode 的情境）
+- [x] 輕量 session auth（hardcode 兩組帳密：admin/admin123、user/user123）
 
 ### Phase 3 — React 前端
 - [ ] create-react-app + Material UI 安裝
