@@ -87,12 +87,31 @@ CloudSystem_Midterm_Project/
 | POST | `/api/chain/compare` | 跨節點比對 | 管理員 |
 | POST | `/api/chain/repair` | 多數決修復 | 管理員 |
 
-### 節點同步 API（內部）
+### 節點同步 API（內部，無 auth）
 
 | Method | Path | 說明 |
 |--------|------|------|
 | POST | `/sync/block` | 接收其他節點推送的區塊更新 |
 | GET | `/sync/blocks` | 提供本節點完整區塊資料（供比對用） |
+| POST | `/nodes/notify` | 接收新 peer 加入通知，更新本節點記憶體 peer 清單 |
+| POST | `/nodes/welcome` | 接收完整 peer 清單（專供新加入節點初始化連線用） |
+
+### 節點管理 API（管理員）
+
+| Method | Path | 說明 | 權限 |
+|--------|------|------|------|
+| GET | `/api/nodes` | 列出已知節點、健康狀態、各節點區塊數 | 管理員 |
+| POST | `/api/nodes/approve` | 批准新節點加入，觸發廣播與 peer 清單交換 | 管理員 |
+
+### 帳戶管理 API（管理員）
+
+| Method | Path | 說明 | 權限 |
+|--------|------|------|------|
+| GET | `/api/admin/accounts` | 所有帳本帳戶：餘額、密碼狀態（啟用/休眠）、凍結狀態 | 管理員 |
+| POST | `/api/admin/account/password` | 設定或重設帳本帳戶密碼（空字串 = 重置為休眠） | 管理員 |
+| POST | `/api/admin/freeze` | 凍結指定帳本帳戶（無法轉出） | 管理員 |
+| POST | `/api/admin/unfreeze` | 解凍指定帳本帳戶 | 管理員 |
+| GET | `/api/admin/audit` | 取得最近操作記錄（時間、操作者、動作、結果） | 管理員 |
 
 ---
 
@@ -129,9 +148,38 @@ CloudSystem_Midterm_Project/
 - [ ] Logger 設定（`logging` 模組，不同等級 color coding）
 - [ ] Error message 補全（餘額不足、帳戶不存在、鏈結錯誤）
 
+### Phase 6 — 加分功能實作
+
+#### F1：動態節點加入
+- [ ] 後端：記憶體 `KNOWN_PEERS` 清單（初始值來自 `PEERS` 環境變數）
+- [ ] 後端：`GET /api/nodes`（列出 peer + 逐一 health check）
+- [ ] 後端：`POST /api/nodes/approve`（加入 peer → 廣播 `/nodes/notify` 給所有已知節點 → 傳完整 peer 清單給新節點 `/nodes/welcome` → 觸發新節點 `GET /sync/blocks` 同步鏈）
+- [ ] 後端：`POST /nodes/notify`（接收新 peer 通知，更新本節點 `KNOWN_PEERS`）
+- [ ] 後端：`POST /nodes/welcome`（接收完整 peer 清單，初始化 `KNOWN_PEERS` 並立即同步區塊鏈）
+- [ ] 前端：Admin「節點管理」頁面（節點卡片 + 健康燈號 + 區塊數 + 批准輸入框）
+- [ ] `push_block_to_peers` 改用動態 `KNOWN_PEERS`（而非固定 `PEERS` 環境變數）
+
+#### F2-密碼：帳戶密碼系統
+- [ ] 後端：記憶體 `ACCOUNT_PASSWORDS`（dict）+ `FROZEN_ACCOUNTS`（set）
+- [ ] 後端：`POST /api/admin/account/password`（設定/重設密碼，密碼以 SHA256 儲存）
+- [ ] 後端：修改 `transfer` 端點——依序檢查凍結 → admin 免驗 → 休眠攔截 → 密碼比對
+- [ ] 前端：`Transfer.jsx` 新增「帳戶密碼」輸入欄位
+- [ ] 前端：Admin 帳戶管理頁面新增「設定密碼」表單
+
+#### F2-B：帳戶管理
+- [ ] 後端：`GET /api/admin/accounts`（掃描所有區塊取得帳戶清單，附加密碼狀態與凍結狀態）
+- [ ] 後端：`POST /api/admin/freeze` + `POST /api/admin/unfreeze`
+- [ ] 前端：Admin 帳戶管理頁面（表格：帳戶名、餘額、狀態 badge、操作按鈕）
+
+#### F2-C：Audit Log
+- [ ] 後端：`AUDIT_LOG = deque(maxlen=200)`，定義 `audit(action, actor, detail, result)` helper
+- [ ] 後端：在 login、logout、transfer、verify、approve node、set password、freeze/unfreeze 各處插入 audit 記錄
+- [ ] 後端：`GET /api/admin/audit`（回傳 audit buffer，管理員限定）
+- [ ] 前端：Admin「操作記錄」頁面（時間線列表，顯示時間、操作者、動作、結果）
+
 ### Phase 5 — 收尾 + Demo 準備
-- [ ] Demo 步驟文件（README 更新）
-- [ ] 架構圖
+- [ ] Demo 步驟文件（README 更新，含 node4 加入流程指令）
+- [ ] 架構圖（含動態節點加入示意）
 - [ ] 完整 demo 流程演練
 
 ---
@@ -227,67 +275,77 @@ curl http://localhost:5001/api/nodes
 
 ### 功能 F2：強化 Admin 與一般用戶的差異
 
-#### 決定：帳本帳戶控制權限（ACL 系統）
+#### 決定：帳本帳戶控制權限（帳戶密碼模型）
 
-登入帳號（admin/user）與帳本帳戶（angel/alice/bob）**不強制綁定**，而是透過權限表管理：
+採用**方案三：帳戶密碼**，以密碼替代私鑰的概念。每個帳本帳戶有一組獨立密碼，由 Admin 設定後發給帳戶持有人；轉帳時需提供寄款帳戶的密碼，否則拒絕。
 
-- **預設**：任何登入用戶只能從與自己登入名稱相同的帳本帳戶轉出（`user` 只能轉 `user` 的錢）
-- **管理員**：可授予或撤銷某個登入帳號對任意帳本帳戶的控制權
-- **管理員本身**：預設擁有所有帳本帳戶的控制權（可轉任何帳戶的錢）
+**核心規則：**
+- 每個帳本帳戶的密碼**獨立且互不共用**（alice 的密碼只能用於 alice 帳戶）
+- 沒有密碼的帳戶為**休眠（Dormant）狀態**：只能收款，無法轉出
+- Admin 免密碼驗證，可從任意帳戶轉帳（管理員特權）
+- 凍結帳戶無法轉出（即使有正確密碼）
+
+**隱式帳戶建立的處理：**
+維持現有設計，轉帳到不存在的帳戶會自動建立該帳戶，但新帳戶自動進入休眠狀態。垃圾帳戶攻擊因此失效——就算建立了 1000 個休眠帳戶，Admin 不發密碼就沒人能動用它們，鏈式洗錢在第一跳也會被阻斷。
 
 ```python
-# 記憶體中的 ACL 結構
-ACCOUNT_ACL = {
-    "admin": ["*"],       # * 代表所有帳本帳戶
-    "user":  ["user"],    # 預設只能控制同名帳戶
-}
+# app.py 記憶體結構（重啟後清空，符合「新容器 = 新開始」的設計）
+ACCOUNT_PASSWORDS = {}    # {"alice": "hashed_pw", "bob": "hashed_pw"}
+FROZEN_ACCOUNTS   = set() # {"carol"}
 ```
 
-Demo 說明點：「這模擬聯盟鏈中的帳戶授權機制——只有被授權的人才能動用特定帳戶的資金」。
+**Transfer 驗證流程：**
+```
+1. 寄款帳戶是否凍結？      → 是 → 拒絕（帳戶已凍結）
+2. 登入身份是 admin？      → 是 → 跳過密碼驗證，直接執行
+3. 帳戶是否有密碼（啟用）？ → 否 → 拒絕（帳戶未啟用，請聯繫管理員）
+4. 密碼是否符合？          → 否 → 拒絕（密碼錯誤）
+5. 餘額是否足夠？          → 否 → 拒絕（餘額不足）
+6. 執行轉帳 ✅
+```
+
+**對應真實區塊鏈的概念：**
+密碼對應私鑰，Admin 是「憑證發行機構（CA）」，休眠帳戶對應「無人持有私鑰的地址」。可在 demo 中說明此設計對應 Hyperledger Fabric 的 MSP（成員服務提供者）角色。
 
 新增 API：
 
 | Method | Path | 說明 | 權限 |
 |--------|------|------|------|
-| GET | `/api/acl` | 查看目前所有帳號的帳本控制權限 | 管理員 |
-| POST | `/api/acl/grant` | 授予某登入帳號控制某帳本帳戶的權限 | 管理員 |
-| POST | `/api/acl/revoke` | 撤銷控制權限 | 管理員 |
+| POST | `/api/admin/account/password` | 設定或重設某帳本帳戶的密碼（空字串 = 重置為休眠） | 管理員 |
 
 #### 決定：管理員獨有功能（A + B + C 全做）
 
-**A. 節點管理**（與 F1 整合，幾乎免費附贈）
-- 查看所有節點列表與健康狀態
-- 批准新節點加入
+**A. 節點管理**（與 F1 整合）
+- 查看所有已知節點、健康狀態燈號、區塊數量
+- 批准新節點加入網路
 
 **B. 帳戶管理**
-- 全帳戶餘額總覽（一次看所有帳本帳戶的餘額）
-- 凍結帳戶（被凍結的帳本帳戶無法轉出，但可以收款）
-- 授權/撤銷帳本帳戶控制權（ACL 管理）
+- 全帳戶餘額 + 狀態總覽（休眠 / 啟用 / 凍結）
+- 設定/重設帳戶密碼（開戶 / 帳戶交接）
+- 凍結/解凍帳戶
 
 新增 API：
 
 | Method | Path | 說明 | 權限 |
 |--------|------|------|------|
-| GET | `/api/admin/accounts` | 所有帳本帳戶餘額總覽 | 管理員 |
+| GET | `/api/admin/accounts` | 所有帳本帳戶：餘額、密碼狀態（啟用/休眠）、凍結狀態 | 管理員 |
 | POST | `/api/admin/freeze` | 凍結指定帳本帳戶 | 管理員 |
 | POST | `/api/admin/unfreeze` | 解凍指定帳本帳戶 | 管理員 |
 
-凍結清單同樣存記憶體：`FROZEN_ACCOUNTS = set()`
-
 **C. Audit Log**
-- 記錄所有登入/登出、轉帳、驗證、管理操作，含時間戳與操作者
-- 利用現有 `logging` 模組，新增一個 in-memory 的 audit buffer（最近 200 筆）
-- 管理員可在 UI 查看，一般用戶看不到
+- 記錄登入/登出、轉帳、驗證、密碼設定、凍結/解凍等所有操作，含時間戳與操作者
+- in-memory circular buffer（最近 200 筆），重啟後清空
+- 管理員可在 UI 查看完整操作歷史，一般用戶不可見
 
 新增 API：
 
 | Method | Path | 說明 | 權限 |
 |--------|------|------|------|
-| GET | `/api/admin/audit` | 取得最近操作記錄 | 管理員 |
+| GET | `/api/admin/audit` | 取得最近操作記錄（時間、操作者、動作、結果） | 管理員 |
 
 #### 決定：Verify 獎勵機制
 
-保留現有「驗證成功得 10 元」機制。後續可擴充其他獎勵事件（例如：成功同步新節點獎勵、第 N 筆交易里程碑獎勵等），作為教學「激勵機制」的演示點。
+保留現有「驗證成功得 10 元」機制，對應 Proof-of-Work 礦工獎勵概念。後續可擴充：成功同步新節點獎勵、第 N 筆交易里程碑獎勵等。
 
 ---
 
@@ -295,12 +353,14 @@ Demo 說明點：「這模擬聯盟鏈中的帳戶授權機制——只有被授
 
 | 優先 | 項目 | 預估工作量 |
 |------|------|-----------|
-| 1 | F1 後端：`/api/nodes`、`/nodes/notify`、`/nodes/welcome` | 中 |
-| 2 | F1 前端：節點管理頁面 | 小 |
-| 3 | F2-B：帳戶凍結 + 總覽 API + 前端 | 中 |
-| 4 | F2-C：Audit Log buffer + API + 前端 | 小 |
-| 5 | F2-A（ACL）：grant/revoke API + 前端 + transfer 檢查邏輯 | 中 |
-| 6 | 獎勵機制擴充 | 視時間 |
+| 1 | F1 後端：PEERS 清單 + `/api/nodes` + `/api/nodes/approve` + 廣播/同步邏輯 | 中 |
+| 2 | F1 前端：Admin 節點管理頁面（清單 + 健康燈號 + 批准輸入框） | 小 |
+| 3 | F2-密碼 後端：`ACCOUNT_PASSWORDS` + transfer 密碼驗證 + 休眠/凍結邏輯 | 中 |
+| 4 | F2-密碼 前端：Transfer 加密碼欄位、Admin 密碼設定 UI | 小 |
+| 5 | F2-B 後端：`/api/admin/accounts` + freeze/unfreeze API | 小 |
+| 6 | F2-B 前端：Admin 帳戶管理頁面（總覽 + 操作按鈕） | 小 |
+| 7 | F2-C 後端：audit buffer + 記錄插入點 + `/api/admin/audit` | 小 |
+| 8 | F2-C 前端：Audit Log 頁面（時間線列表） | 小 |
 
 ---
 
