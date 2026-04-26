@@ -37,6 +37,37 @@ def account_exists(account: str, base=None) -> bool:
     return get_balance(account, base) is not None
 
 
+def get_log(account: str, base=None) -> list:
+    """
+    Return all transactions involving `account`, with block info.
+    Each entry: {"block_num": int, "transaction": str, "role": "sender"|"receiver"|"both"}
+    """
+    base = base or _ledger_path()
+    blocks = get_all_blocks(base)
+    log = []
+
+    for block in blocks:
+        for tx in block["transactions"]:
+            parts = [p.strip() for p in tx.split(",")]
+            if len(parts) != 3:
+                continue
+            sender, receiver, _ = parts
+            if sender == account or receiver == account:
+                if sender == account and receiver == account:
+                    role = "both"
+                elif sender == account:
+                    role = "sender"
+                else:
+                    role = "receiver"
+                log.append({
+                    "block_num": block["block_num"],
+                    "transaction": tx,
+                    "role": role,
+                })
+
+    return log
+
+
 def transfer(sender: str, receiver: str, amount: int, base=None) -> dict:
     """
     Execute a transfer with file-lock protection.

@@ -9,7 +9,7 @@ from flask_cors import CORS
 
 from ledger import (
     init_ledger, get_all_blocks, read_block, get_block_count,
-    transfer, get_balance, verify_chain, compute_hash,
+    transfer, get_balance, get_log, verify_chain, compute_hash,
 )
 from ledger.block import write_block_file
 
@@ -135,6 +135,15 @@ def api_balance(account):
     if balance is None:
         return jsonify({"error": f"帳戶不存在: {account}"}), 404
     return jsonify({"account": account, "balance": balance})
+
+
+@app.route("/api/logs/<account>")
+@login_required
+def api_logs(account):
+    log = get_log(account)
+    if not log and get_balance(account) is None:
+        return jsonify({"error": f"帳戶不存在: {account}"}), 404
+    return jsonify({"account": account, "count": len(log), "logs": log})
 
 
 @app.route("/api/transfer", methods=["POST"])
