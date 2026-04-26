@@ -140,7 +140,14 @@ docker exec node1 python app_checkChain.py alice
 
 ## Demo 流程（對應評分項目）
 
+> 所有操作都透過 `docker exec -it <節點> bash` 進入容器內部執行，
+> 讓助教直接看到容器裡的檔案結構與程式行為。
+
+---
+
 ### 基礎功能部分（給助教看）
+
+---
 
 **步驟 1：確認三個節點都在運行**
 
@@ -148,39 +155,102 @@ docker exec node1 python app_checkChain.py alice
 docker ps
 ```
 
-**步驟 2：展示初始帳本狀態**
+看到 `node1`、`node2`、`node3` 都是 `Up` 狀態。
+
+---
+
+**步驟 2：進入 node1，展示帳本的實際儲存方式**
 
 ```bash
-docker exec node1 python app_checkMoney.py angel
+docker exec -it node1 bash
 ```
 
-或開啟 http://localhost:5001 → 帳本總覽，展示現有區塊。
-
-**步驟 3：執行 6 次轉帳，觸發新區塊產生**
-
-每塊放 5 筆，第 5、10 筆交易時會自動建立新區塊：
+進入容器後，依序執行：
 
 ```bash
-docker exec node1 python app_transaction.py angel alice 100
-docker exec node1 python app_transaction.py angel bob 100
-docker exec node1 python app_transaction.py angel carol 100
-docker exec node1 python app_transaction.py alice bob 30
-docker exec node1 python app_transaction.py bob carol 20
-# ↑ 前 5 筆湊滿 → 新區塊產生
-docker exec node1 python app_transaction.py carol alice 10
-# ↑ 第 6 筆，放入新區塊
+# 確認目前位置（應在 /app）
+pwd
+
+# 列出程式檔案
+ls
+
+# 查看帳本儲存在哪裡
+ls /storage/
+
+# 印出第一個區塊的原始內容，讓助教看到純文字格式
+cat /storage/block_0001.txt
 ```
 
-**步驟 4：查詢帳戶餘額**
-
-```bash
-docker exec node1 python app_checkMoney.py alice
+預期輸出（創世區塊）：
+```
+Previous block: 0000000000000000000000000000000000000000000000000000000000000000
+genesis, angel, 999999
+Next block: None
+Hashcode: a3f2c1...（64碼 SHA256）
 ```
 
-**步驟 5：驗證帳本 + 領獎勵**
+這裡可以向助教說明：每個區塊是一個 `.txt` 純文字檔，`Previous block` 就是前一塊的 SHA256，這就是「鏈」的連接方式。
+
+---
+
+**步驟 3：查詢 angel 的初始餘額**
+
+繼續在容器內：
 
 ```bash
-docker exec node1 python app_checkChain.py alice
+python app_checkMoney.py angel
+```
+
+輸出：
+```
+angel 的餘額: 999999
+```
+
+---
+
+**步驟 4：執行 6 次轉帳，觸發新區塊產生**
+
+每塊最多 5 筆，第 5 筆填滿後系統自動建立新區塊：
+
+```bash
+python app_transaction.py angel alice 100
+python app_transaction.py angel bob 100
+python app_transaction.py angel carol 100
+python app_transaction.py alice bob 30
+python app_transaction.py bob carol 20
+```
+
+第 5 筆執行後，確認新區塊已產生：
+
+```bash
+ls /storage/
+cat /storage/block_0002.txt
+```
+
+繼續第 6 筆：
+
+```bash
+python app_transaction.py carol alice 10
+```
+
+---
+
+**步驟 5：查詢帳戶餘額與交易紀錄**
+
+```bash
+python app_checkMoney.py alice
+
+python app_checkLog.py alice
+```
+
+交易紀錄輸出會顯示每筆交易的區塊編號、付款 / 收款角色。
+
+---
+
+**步驟 6：驗證帳本完整性 + 領獎勵**
+
+```bash
+python app_checkChain.py alice
 ```
 
 輸出：
@@ -189,60 +259,120 @@ OK（共 N 個區塊，所有雜湊值正確）
 獎勵：angel → alice 10 元  （Block #N）
 ```
 
-**步驟 6：人為竄改 + 偵測錯誤**
-
-先找到區塊檔案的位置，進入容器：
+驗證完後再查一次餘額，確認 10 元已入帳：
 
 ```bash
-docker exec -it node1 bash
-ls /storage/
+python app_checkMoney.py alice
 ```
 
-直接修改其中一個區塊（例如改金額）：
+---
+
+**步驟 7：人為竄改區塊，展示偵測機制**
+
+先看目前 block_0001.txt 的內容：
 
 ```bash
-# 在容器內
+cat /storage/block_0001.txt
+```
+
+直接用文字指令竄改金額（把 100 改成 999）：
+
+```bash
 sed -i 's/angel, alice, 100/angel, alice, 999/' /storage/block_0001.txt
+```
+
+確認竄改成功：
+
+```bash
+cat /storage/block_0001.txt
+```
+
+再次驗證，系統應該偵測到 hash 不符：
+
+```bash
+python app_checkChain.py alice
+```
+
+輸出會列出損壞的區塊編號和錯誤原因，程式以退出碼 1 結束。
+
+離開容器：
+
+```bash
 exit
 ```
-
-再次執行驗證：
-
-```bash
-docker exec node1 python app_checkChain.py alice
-```
-
-輸出會顯示 hash 不符的區塊編號，退出碼 1。
 
 ---
 
 ### 進階功能部分（給老師看）
 
+---
+
 **進階功能 1：圖形化介面**
 
-開啟 http://localhost:5001，用 `admin` 登入，展示所有頁面操作。
+開啟瀏覽器 http://localhost:5001，用 `admin` / `admin123` 登入，
+依序展示帳本總覽、執行轉帳、餘額查詢、驗證頁面。
 
-**進階功能 2：分散式同步**
+---
 
-在 node1 執行轉帳，同時在 node2 查帳本，確認區塊已同步：
+**進階功能 2：分散式同步（三節點各自獨立儲存）**
+
+先展示三個節點的 volume 是獨立的：
 
 ```bash
-# 在 node1 轉帳
-docker exec node1 python app_transaction.py angel dave 200
-
-# 在 node2 查看（應該也有這筆交易）
-docker exec node2 python app_checkLog.py dave
+docker volume inspect client1_data
+docker volume inspect client2_data
 ```
 
-或打開兩個瀏覽器分頁，一個開 localhost:5001、一個開 localhost:5002，在 5001 轉帳後，重新整理 5002 的帳本總覽，會看到同一筆交易。
+兩個 volume 的 `Mountpoint` 路徑不同，代表資料沒有共用。
+
+再展示同步效果。開兩個 terminal，分別進入不同容器：
+
+**Terminal A（node1）：**
+```bash
+docker exec -it node1 bash
+python app_transaction.py angel dave 500
+ls /storage/
+```
+
+**Terminal B（node2）：**
+```bash
+docker exec -it node2 bash
+ls /storage/
+python app_checkLog.py dave
+```
+
+node2 的 `/storage/` 應該已經同步到這筆交易，且 `dave` 的紀錄也查得到。
+
+---
 
 **進階功能 3：跨節點完整性驗證 + 多數決修復**
 
-1. 竄改 node1 的某個區塊（步驟 6 的方式）
-2. 用瀏覽器開啟 http://localhost:5001，以 `admin` 登入
-3. 進入「驗證 / 修復」→「比對所有節點」，可以看到 node1 和 node2/node3 有 hash 差異
-4. 按「執行修復」，node1 的損壞區塊會被 node2/node3 的多數決版本覆蓋
-5. 再次「執行驗證」，顯示通過
+**第一步：竄改 node1 的區塊**
+
+```bash
+docker exec -it node1 bash
+sed -i 's/angel, dave, 500/angel, dave, 1/' /storage/block_0002.txt
+cat /storage/block_0002.txt
+exit
+```
+
+**第二步：用網頁介面展示比對與修復**
+
+開啟 http://localhost:5001，以 `admin` 登入，進入「驗證 / 修復」：
+
+1. 按「執行驗證」→ 顯示失敗，列出損壞的區塊
+2. 按「比對所有節點」→ 顯示 node1 的 block hash 與 node2/node3 不同
+3. 按「執行修復」→ 顯示「已修復區塊：2」
+4. 再按「執行驗證」→ 顯示通過
+
+**第三步：回到容器確認修復結果**
+
+```bash
+docker exec -it node1 bash
+cat /storage/block_0002.txt
+```
+
+金額應該已被還原為 `500`，hash 也恢復正確。
 
 ---
 
