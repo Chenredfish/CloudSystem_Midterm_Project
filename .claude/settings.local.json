@@ -2,7 +2,16 @@
   "permissions": {
     "allow": [
       "Bash(python -c ' *)",
-      "Bash(pip install *)"
+      "Bash(pip install *)",
+      "PowerShell(docker exec node1 ls /app/frontend/)",
+      "Bash(docker-compose down *)",
+      "Bash(docker-compose build *)",
+      "Bash(docker-compose up *)",
+      "Bash(curl -s -c /tmp/jar -X POST http://localhost:5001/api/login -H \"Content-Type: application/json\" -d '{\"username\":\"user\",\"password\":\"user123\"}')",
+      "Bash(curl -s -b /tmp/jar -c /tmp/jar -X POST http://localhost:5001/api/transfer -H \"Content-Type: application/json\" -d '{\"sender\":\"angel\",\"receiver\":\"alice\",\"amount\":100}')",
+      "Bash(curl -s -c /tmp/jar2 -b /tmp/jar -X POST http://localhost:5002/api/login -H \"Content-Type: application/json\" -d '{\"username\":\"user\",\"password\":\"user123\"}')",
+      "Bash(curl -s -b /tmp/jar2 http://localhost:5002/api/balance/alice)",
+      "Bash(curl -s -b /tmp/jar http://localhost:5001/api/chain/verify)"
     ]
   }
 }

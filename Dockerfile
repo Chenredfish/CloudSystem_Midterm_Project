@@ -15,6 +15,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
+COPY app_checkMoney.py .
+COPY app_checkLog.py .
+COPY app_transaction.py .
+COPY app_checkChain.py .
 COPY ledger/ ./ledger/
 
 COPY --from=frontend-builder /frontend/build ./frontend/build
