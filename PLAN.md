@@ -115,13 +115,13 @@ CloudSystem_Midterm_Project/
 - [x] 輕量 session auth（hardcode 兩組帳密：admin/admin123、user/user123）
 
 ### Phase 3 — React 前端
-- [ ] create-react-app + Material UI 安裝
-- [ ] Login 頁面
-- [ ] Dashboard（區塊列表 + 近期交易）
-- [ ] Transfer 表單
-- [ ] Balance 查詢
-- [ ] Verify / Repair 頁面（管理員限定）
-- [ ] `npm run build` 輸出整合進 Flask
+- [x] create-react-app + Material UI 安裝
+- [x] Login 頁面
+- [x] Dashboard（區塊列表 + 近期交易）
+- [x] Transfer 表單
+- [x] Balance 查詢
+- [x] Verify / Repair 頁面（管理員限定）
+- [x] `npm run build` 輸出整合進 Flask（multi-stage Dockerfile）
 
 ### Phase 4 — 工具腳本 + 細節
 - [ ] `scripts/seed.py`（產生 100 筆 / 清空重建）
