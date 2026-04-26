@@ -5,7 +5,7 @@ import {
   List, ListItem, ListItemText, Chip, Stack
 } from '@mui/material';
 import VerifiedIcon from '@mui/icons-material/Verified';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import WarningIcon from '@mui/icons-material/Warning';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import BuildIcon from '@mui/icons-material/Build';
 import api from '../api';
@@ -92,7 +92,7 @@ export default function Verify({ role }) {
                 <List dense disablePadding>
                   {verifyResult.errors.map((e, i) => (
                     <ListItem key={i} disableGutters>
-                      <ErrorOutlineIcon color="error" fontSize="small" sx={{ mr: 1 }} />
+                      <WarningIcon color="error" fontSize="small" sx={{ mr: 1 }} />
                       <ListItemText primary={e} primaryTypographyProps={{ fontSize: 13 }} />
                     </ListItem>
                   ))}
