@@ -14,12 +14,26 @@ from ledger import (
 from ledger.block import write_block_file
 
 # ---------------------------------------------------------------------------
-# Logging
+# Logging（color-coded by level）
 # ---------------------------------------------------------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+class _ColorFormatter(logging.Formatter):
+    _C = {
+        logging.DEBUG:    "\033[36m",    # cyan
+        logging.INFO:     "\033[32m",    # green
+        logging.WARNING:  "\033[33m",    # yellow
+        logging.ERROR:    "\033[31m",    # red
+        logging.CRITICAL: "\033[35;1m",  # bold magenta
+    }
+    _R = "\033[0m"
+
+    def format(self, record):
+        return f"{self._C.get(record.levelno, '')}{super().format(record)}{self._R}"
+
+
+_handler = logging.StreamHandler()
+_handler.setFormatter(_ColorFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+logging.getLogger().addHandler(_handler)
+logging.getLogger().setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -158,7 +172,9 @@ def api_transfer():
         return jsonify({"error": "金額格式錯誤"}), 400
 
     if not sender or not receiver:
-        return jsonify({"error": "sender 和 receiver 不能為空"}), 400
+        return jsonify({"error": "轉出帳戶與收款帳戶不能為空"}), 400
+    if sender == receiver:
+        return jsonify({"error": "轉出帳戶與收款帳戶不能相同"}), 400
 
     result = transfer(sender, receiver, amount)
     if result["success"]:
@@ -193,7 +209,11 @@ def api_compare():
         for b in local_blocks
     }
 
+    if not PEERS:
+        return jsonify({"error": "此節點未設定任何 peer，無法進行跨節點比對"}), 503
+
     peer_data = {}
+    unreachable = []
     for peer in PEERS:
         try:
             r = requests.get(f"{peer}/sync/blocks", timeout=5)
@@ -204,6 +224,7 @@ def api_compare():
         except Exception as e:
             logger.error(f"Compare: can't reach {peer}: {e}")
             peer_data[peer] = None
+            unreachable.append(peer)
 
     all_nums = set(local_map.keys())
     for d in peer_data.values():
@@ -230,6 +251,7 @@ def api_compare():
         "consistent":  len(diffs) == 0,
         "block_count": len(local_blocks),
         "diffs":       diffs,
+        "unreachable": unreachable,
     })
 
 
@@ -246,8 +268,13 @@ def api_repair():
         except Exception as e:
             logger.error(f"Repair: can't reach {peer}: {e}")
 
+    if not PEERS:
+        return jsonify({"error": "此節點未設定任何 peer，無法進行多數決修復"}), 503
     if len(all_chains) < 2:
-        return jsonify({"error": "需要至少 2 個節點才能進行多數決"}), 503
+        reachable = len(all_chains) - 1  # minus local
+        return jsonify({
+            "error": f"需要至少 2 個節點才能進行多數決（目前只有 {reachable} 個 peer 可連線）"
+        }), 503
 
     all_nums: set = set()
     for d in all_chains.values():

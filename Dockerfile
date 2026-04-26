@@ -20,6 +20,7 @@ COPY app_checkLog.py .
 COPY app_transaction.py .
 COPY app_checkChain.py .
 COPY ledger/ ./ledger/
+COPY scripts/ ./scripts/
 
 COPY --from=frontend-builder /frontend/build ./frontend/build
 
