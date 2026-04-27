@@ -159,23 +159,48 @@ CloudSystem_Midterm_Project/
 - [x] 前端：Admin「節點管理」頁面（節點卡片 + 健康燈號 + 區塊數 + 批准輸入框）
 - [x] `push_block_to_peers` 改用動態 `KNOWN_PEERS`（而非固定 `PEERS` 環境變數）
 
-#### F2-密碼：帳戶密碼系統
-- [ ] 後端：記憶體 `ACCOUNT_PASSWORDS`（dict）+ `FROZEN_ACCOUNTS`（set）
-- [ ] 後端：`POST /api/admin/account/password`（設定/重設密碼，密碼以 SHA256 儲存）
-- [ ] 後端：修改 `transfer` 端點——依序檢查凍結 → admin 免驗 → 休眠攔截 → 密碼比對
-- [ ] 前端：`Transfer.jsx` 新增「帳戶密碼」輸入欄位
-- [ ] 前端：Admin 帳戶管理頁面新增「設定密碼」表單
+#### F2-密碼：帳戶密碼系統 ✅
+- [x] 後端：記憶體 `ACCOUNT_PASSWORDS`（dict）+ `FROZEN_ACCOUNTS`（set），持久化至 `/storage/account_state.json`
+- [x] 後端：`POST /api/admin/account/password`（設定/重設密碼，密碼以 SHA256 儲存）
+- [x] 後端：修改 `transfer` 端點——依序檢查凍結 → admin 免驗 → 休眠攔截 → 密碼比對
+- [x] 前端：`Transfer.jsx` 新增「帳戶密碼」輸入欄位
+- [x] 前端：Admin 帳戶管理頁面新增「設定密碼」表單
 
-#### F2-B：帳戶管理
-- [ ] 後端：`GET /api/admin/accounts`（掃描所有區塊取得帳戶清單，附加密碼狀態與凍結狀態）
-- [ ] 後端：`POST /api/admin/freeze` + `POST /api/admin/unfreeze`
-- [ ] 前端：Admin 帳戶管理頁面（表格：帳戶名、餘額、狀態 badge、操作按鈕）
+#### F2-B：帳戶管理 ✅
+- [x] 後端：`GET /api/admin/accounts`（掃描所有區塊取得帳戶清單，附加密碼狀態與凍結狀態）
+- [x] 後端：`POST /api/admin/freeze` + `POST /api/admin/unfreeze`
+- [x] 前端：Admin 帳戶管理頁面（表格：帳戶名、餘額、狀態 badge、操作按鈕）
 
-#### F2-C：Audit Log
-- [ ] 後端：`AUDIT_LOG = deque(maxlen=200)`，定義 `audit(action, actor, detail, result)` helper
-- [ ] 後端：在 login、logout、transfer、verify、approve node、set password、freeze/unfreeze 各處插入 audit 記錄
-- [ ] 後端：`GET /api/admin/audit`（回傳 audit buffer，管理員限定）
-- [ ] 前端：Admin「操作記錄」頁面（時間線列表，顯示時間、操作者、動作、結果）
+#### F2-C：Audit Log ✅
+- [x] 後端：`AUDIT_LOG = deque(maxlen=200)`，定義 `audit(actor, action, target, detail)` helper，持久化至 `/storage/account_state.json`
+- [x] 後端：插入 audit 記錄的完整位置（見下方事件清單）
+- [x] 後端：`GET /api/admin/audit`（回傳 audit buffer，管理員限定）
+- [x] 前端：Admin「操作記錄」頁面（時間線列表，顯示時間、操作者、動作、結果）
+
+**已記錄的事件（action 欄位）：**
+
+| action | 觸發情境 |
+|--------|---------|
+| `login` | 登入成功 |
+| `login_failed` | 登入失敗（帳號或密碼錯誤） |
+| `logout` | 登出 |
+| `transfer` | 轉帳成功 |
+| `transfer_rejected` | 轉帳被拒（凍結 / 未啟用 / 密碼錯） |
+| `transfer_failed` | 轉帳失敗（餘額不足等後端錯誤） |
+| `set_password` | 管理員設定帳戶密碼 |
+| `freeze` / `unfreeze` | 管理員凍結 / 解凍帳戶 |
+| `verify_chain` | 驗證本節點鏈（成功含獎勵、失敗含原因） |
+| `compare_chain` | 跨節點比對（含一致性結果與差異數） |
+| `repair_chain` | 多數決修復（含被修復的區塊編號） |
+| `sync_conflict` | 推送區塊時對方回傳 409 衝突 |
+| `sync_failed` | 推送區塊時無法連線 peer |
+| `freeze_sync_failed` | 廣播凍結清單時無法連線 peer |
+| `freeze_sync_received` | 收到其他節點廣播的凍結清單 |
+| `freeze_pull_failed` | 新節點加入時拉取凍結清單失敗 |
+| `node_join_request` | 新節點申請加入（待審核） |
+| `node_approved` | 管理員批准節點加入 |
+| `full_sync_done` | 新節點加入後完整鏈同步成功 |
+| `full_sync_failed` | 新節點加入後完整鏈同步失敗 |
 
 ### Phase 5 — 收尾 + Demo 準備
 - [ ] Demo 步驟文件（README 更新，含 node4 加入流程指令）
@@ -334,8 +359,8 @@ FROZEN_ACCOUNTS   = set() # {"carol"}
 | POST | `/api/admin/unfreeze` | 解凍指定帳本帳戶 | 管理員 |
 
 **C. Audit Log**
-- 記錄登入/登出、轉帳、驗證、密碼設定、凍結/解凍等所有操作，含時間戳與操作者
-- in-memory circular buffer（最近 200 筆），重啟後清空
+- 記錄認證、轉帳（含各種拒絕原因）、鏈操作、節點同步、帳戶管理等全部系統事件，含時間戳與操作者
+- in-memory circular buffer（最近 200 筆）+ 持久化至 `/storage/account_state.json`（容器重啟後恢復）
 - 管理員可在 UI 查看完整操作歷史，一般用戶不可見
 
 新增 API：
