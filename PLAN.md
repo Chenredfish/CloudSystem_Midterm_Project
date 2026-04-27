@@ -143,10 +143,10 @@ CloudSystem_Midterm_Project/
 - [x] `npm run build` 輸出整合進 Flask（multi-stage Dockerfile）
 
 ### Phase 4 — 工具腳本 + 細節
-- [ ] `scripts/seed.py`（產生 100 筆 / 清空重建）
-- [ ] `scripts/tamper.py`（竄改指定節點指定區塊）
-- [ ] Logger 設定（`logging` 模組，不同等級 color coding）
-- [ ] Error message 補全（餘額不足、帳戶不存在、鏈結錯誤）
+- [x] `scripts/seed.py`（產生 100 筆 / 清空重建，透過本地 Flask API 執行以確保 peer 同步）
+- [x] `scripts/tamper.py`（竄改指定節點指定區塊）
+- [x] Logger 設定（`logging` 模組，不同等級 color coding）
+- [x] Error message 補全（餘額不足、帳戶不存在、鏈結錯誤）
 
 ### Phase 6 — 加分功能實作
 
