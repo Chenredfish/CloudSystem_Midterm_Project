@@ -104,6 +104,7 @@ docker exec node1 curl -s http://localhost:5000/health
 - 一般用戶（role: user）需額外輸入付款方的帳戶密碼（由管理員預先設定）
 - 管理員（role: admin）轉帳無需密碼，可操作任何帳戶
 - 成功後顯示區塊編號，若剛好湊滿 5 筆會提示「新區塊已建立」
+- **注意**：密碼驗證只在你連線的那個節點執行。若 Admin 在 node1 設定密碼，用戶必須連到 node1（http://localhost:5001）才能使用該密碼轉帳
 
 **餘額查詢**
 - 輸入帳戶名稱按「查詢」
@@ -554,6 +555,15 @@ docker stop node4; docker rm node4; docker volume rm client4_data
 ---
 
 **進階功能 5：帳戶管理（密碼設定 + 凍結/解凍）**
+
+> **重要：密碼是節點本地的存取控制**
+>
+> 密碼只存在於被設定的那個節點，不會同步給其他節點。
+> 如果 Admin 在 node1 替 alice 設定密碼，alice 只能透過 **node1**（http://localhost:5001）進行轉帳；
+> 若連線到 node2 或 node3，會收到「帳戶未啟用」錯誤，因為那些節點不知道 alice 的密碼。
+>
+> **建議做法（此 demo）：指定 node1 為用戶轉帳的統一入口節點。**
+> 凍結/解凍則不同——凍結狀態會廣播到所有節點，任一節點都會拒絕凍結帳戶的轉帳。
 
 > 前提：系統運行中，seed 資料已載入（alice、bob 有餘額）。
 

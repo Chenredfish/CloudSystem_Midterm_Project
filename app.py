@@ -105,16 +105,21 @@ def _save_account_state():
         logger.error(f"Failed to save account state: {e}")
 
 
-def _push_account_state_to_peers():
-    """Broadcast current account state to all known peers (background-safe)."""
+def _push_freeze_to_peers():
+    """Broadcast frozen-accounts list to all peers.
+
+    Passwords are intentionally NOT included: they are verified at the entry
+    node only (the node the user POSTs to) and must never leave that node.
+    Freeze state IS a global admin policy and must be consistent everywhere.
+    """
     with _accounts_lock:
-        payload = {"passwords": dict(ACCOUNT_PASSWORDS), "frozen": list(FROZEN_ACCOUNTS)}
+        payload = {"frozen": list(FROZEN_ACCOUNTS)}
     for peer in get_peers():
         try:
             requests.post(f"{peer}/sync/account_state", json=payload, timeout=3)
-            logger.info(f"Account state synced to {peer}")
+            logger.info(f"Freeze list synced to {peer}")
         except Exception as e:
-            logger.warning(f"Account state sync to {peer} failed: {e}")
+            logger.warning(f"Freeze list sync to {peer} failed: {e}")
 
 
 def get_peers() -> list:
@@ -449,24 +454,23 @@ def sync_blocks():
 
 @app.route("/sync/account_state")
 def sync_account_state_get():
-    """Return current account state so peers can pull it."""
+    """Return frozen-accounts list for peer pull.  Passwords are never exposed."""
     with _accounts_lock:
-        return jsonify({"passwords": dict(ACCOUNT_PASSWORDS), "frozen": list(FROZEN_ACCOUNTS)})
+        return jsonify({"frozen": list(FROZEN_ACCOUNTS)})
 
 
 @app.route("/sync/account_state", methods=["POST"])
 def sync_account_state_post():
-    """Receive account state broadcast from a peer; replace local state and persist."""
-    data      = request.json or {}
-    passwords = data.get("passwords", {})
-    frozen    = data.get("frozen", [])
+    """Receive freeze-list broadcast from a peer; apply and persist.
+    Passwords field is ignored even if present — they must stay on the node
+    where the admin configured them (entry-node verification model).
+    """
+    frozen = request.json.get("frozen", []) if request.json else []
     with _accounts_lock:
-        ACCOUNT_PASSWORDS.clear()
-        ACCOUNT_PASSWORDS.update(passwords)
         FROZEN_ACCOUNTS.clear()
         FROZEN_ACCOUNTS.update(frozen)
     _save_account_state()
-    logger.info(f"Account state replaced from peer: {len(passwords)} passwords, {len(frozen)} frozen")
+    logger.info(f"Freeze list replaced from peer: {len(frozen)} frozen accounts")
     return jsonify({"status": "ok"})
 
 # ---------------------------------------------------------------------------
@@ -602,8 +606,7 @@ def api_admin_set_password():
     pw_hash = hashlib.sha256(password.encode()).hexdigest()
     with _accounts_lock:
         ACCOUNT_PASSWORDS[account] = pw_hash
-    _save_account_state()
-    threading.Thread(target=_push_account_state_to_peers, daemon=True).start()
+    _save_account_state()   # local persistence only; passwords do NOT sync to peers
     audit(session["username"], "set_password", account)
     logger.info(f"Password set for account: {account}")
     return jsonify({"status": "ok", "account": account})
@@ -619,7 +622,7 @@ def api_admin_freeze():
     with _accounts_lock:
         FROZEN_ACCOUNTS.add(account)
     _save_account_state()
-    threading.Thread(target=_push_account_state_to_peers, daemon=True).start()
+    threading.Thread(target=_push_freeze_to_peers, daemon=True).start()
     audit(session["username"], "freeze", account)
     logger.info(f"Account frozen: {account}")
     return jsonify({"status": "ok", "account": account})
@@ -635,7 +638,7 @@ def api_admin_unfreeze():
     with _accounts_lock:
         FROZEN_ACCOUNTS.discard(account)
     _save_account_state()
-    threading.Thread(target=_push_account_state_to_peers, daemon=True).start()
+    threading.Thread(target=_push_freeze_to_peers, daemon=True).start()
     audit(session["username"], "unfreeze", account)
     logger.info(f"Account unfrozen: {account}")
     return jsonify({"status": "ok", "account": account})
@@ -684,19 +687,17 @@ def nodes_welcome():
                             b["transactions"], b.get("next_hash"),
                         )
                 logger.info(f"Full sync from {peer}: {len(blocks)} blocks written")
-                # Also pull account state from the same peer
+                # Pull frozen list from the same peer (passwords stay on their origin node)
                 try:
                     rs = requests.get(f"{peer}/sync/account_state", timeout=5)
-                    state = rs.json()
+                    frozen = rs.json().get("frozen", [])
                     with _accounts_lock:
-                        ACCOUNT_PASSWORDS.clear()
-                        ACCOUNT_PASSWORDS.update(state.get("passwords", {}))
                         FROZEN_ACCOUNTS.clear()
-                        FROZEN_ACCOUNTS.update(state.get("frozen", []))
+                        FROZEN_ACCOUNTS.update(frozen)
                     _save_account_state()
-                    logger.info(f"Account state pulled from {peer}")
+                    logger.info(f"Freeze list pulled from {peer}: {len(frozen)} accounts")
                 except Exception as ae:
-                    logger.warning(f"Account state pull from {peer} failed: {ae}")
+                    logger.warning(f"Freeze list pull from {peer} failed: {ae}")
                 return
             except Exception as e:
                 logger.error(f"Full sync from {peer} failed: {e}")
