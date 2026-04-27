@@ -2,6 +2,8 @@ import os
 import hashlib
 import threading
 import logging
+import datetime
+from collections import deque
 from functools import wraps
 
 import requests
@@ -50,6 +52,24 @@ KNOWN_PEERS: list = list(PEERS)   # mutable in-memory; grows dynamically via F1 
 _peers_lock = threading.Lock()
 PENDING_NODES: list = []          # nodes awaiting admin approval
 _pending_lock = threading.Lock()
+
+# ---------------------------------------------------------------------------
+# F2 — Account management state
+# ---------------------------------------------------------------------------
+ACCOUNT_PASSWORDS: dict = {}      # {account: sha256_hex_of_password}
+FROZEN_ACCOUNTS: set = set()      # accounts blocked from sending
+_accounts_lock = threading.Lock()
+AUDIT_LOG: deque = deque(maxlen=200)
+
+
+def audit(actor: str, action: str, target: str, detail: str = ""):
+    AUDIT_LOG.append({
+        "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+        "actor":     actor,
+        "action":    action,
+        "target":    target,
+        "detail":    detail,
+    })
 
 
 def get_peers() -> list:
@@ -186,23 +206,23 @@ def api_transfer():
     if sender == receiver:
         return jsonify({"error": "轉出帳戶與收款帳戶不能相同"}), 400
 
-    # ── Phase 6 F2 validation placeholder ───────────────────────────────────
-    # IMPORTANT: admin check MUST come first — it bypasses both freeze and
-    # password checks. Do NOT access data["password"] before this block.
-    #
-    # if session.get("role") != "admin":
-    #     if sender in FROZEN_ACCOUNTS:
-    #         return jsonify({"error": "帳戶已凍結"}), 400
-    #     if sender not in ACCOUNT_PASSWORDS:
-    #         return jsonify({"error": "帳戶未啟用，請聯繫管理員"}), 400
-    #     pw_hash = hashlib.sha256(data.get("password", "").encode()).hexdigest()
-    #     if pw_hash != ACCOUNT_PASSWORDS[sender]:
-    #         return jsonify({"error": "密碼錯誤"}), 400
-    # ────────────────────────────────────────────────────────────────────────
+    # F2 validation: admin bypasses freeze and password checks
+    if session.get("role") != "admin":
+        with _accounts_lock:
+            is_frozen  = sender in FROZEN_ACCOUNTS
+            has_passwd = sender in ACCOUNT_PASSWORDS
+        if is_frozen:
+            return jsonify({"error": "帳戶已凍結"}), 400
+        if not has_passwd:
+            return jsonify({"error": "帳戶未啟用，請聯繫管理員設定密碼"}), 400
+        pw_hash = hashlib.sha256(data.get("password", "").encode()).hexdigest()
+        if pw_hash != ACCOUNT_PASSWORDS[sender]:
+            return jsonify({"error": "密碼錯誤"}), 400
 
     result = transfer(sender, receiver, amount)
     if result["success"]:
         async_push(result["block_num"], also_prev=result.get("new_block_created", False))
+        audit(session["username"], "transfer", f"{sender}→{receiver}", f"amount={amount} block={result['block_num']}")
         return jsonify(result), 200
     return jsonify(result), 400
 
