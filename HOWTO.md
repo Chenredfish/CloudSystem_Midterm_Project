@@ -86,7 +86,7 @@ exit
 
 ### 網頁功能說明
 
-登入後左側有四個頁面：
+登入後左側有功能頁面（管理員看到 5 個，一般用戶看到 4 個）：
 
 **帳本總覽**
 - 顯示所有區塊，最新的在最上面並預設展開
@@ -103,8 +103,12 @@ exit
 
 **驗證 / 修復**
 - **執行驗證**（所有人可用）：驗證本節點所有區塊的 SHA256 是否正確；通過會自動發放 10 元獎勵給目前登入的帳號
-- **比對所有節點**（admin 限定）：向 node2、node3 取得區塊資料，比對 hash 是否一致，列出差異
+- **比對所有節點**（admin 限定）：向所有已知節點取得區塊資料，比對 hash 是否一致，列出差異
 - **執行修復**（admin 限定）：以多數決（2/3 節點一致）覆蓋本節點不一致的區塊
+
+**節點管理**（admin 限定）
+- 顯示所有已知節點的連線狀態（綠燈/紅燈）與目前區塊數
+- 輸入新節點 URL 並按「核准加入」，系統自動廣播並觸發區塊同步
 
 ---
 
@@ -451,6 +455,81 @@ python scripts/tamper.py 2
 
 ```bash
 exit
+```
+
+---
+
+**進階功能 4：動態節點加入（節點運營者模式）**
+
+模擬新節點在運行中的系統動態加入，並自動同步完整帳本。
+
+> 以下指令在 **host 終端**執行（不需要進入容器）。
+
+**步驟一：啟動 node4，初始無任何 peer**
+
+```bash
+docker run -d \
+  --name node4 \
+  --network cloudsystem_midterm_project_ledger_net \
+  -p 5004:5000 \
+  -v client4_data:/storage \
+  -e NODE_ID=node4 \
+  -e LEDGER_PATH=/storage \
+  -e PEERS="" \
+  cloudsystem_midterm_project-node1
+```
+
+確認 node4 啟動，但目前只有創世區塊：
+
+```bash
+curl http://localhost:5004/health
+```
+
+預期回應：
+```json
+{"block_count": 1, "node": "node4", "status": "ok"}
+```
+
+**步驟二：管理員在網頁介面核准 node4 加入**
+
+開啟 **http://localhost:5001**，以 `admin` 登入，進入左側「節點管理」：
+
+1. 目前節點清單顯示 node2、node3（綠燈、顯示各自區塊數）
+2. 在輸入框填入 `http://node4:5000`
+3. 按「核准加入」
+
+系統在背景執行三件事：
+- node1 將 node4 加入自身 peer 名單
+- 廣播給 node2、node3：它們的 peer 名單也同步更新
+- 傳送完整 peer 名單給 node4，觸發 node4 全量同步區塊鏈
+
+**步驟三：確認 node4 已自動同步完整帳本**
+
+回到終端：
+
+```bash
+curl http://localhost:5004/health
+```
+
+預期回應（區塊數已從 1 同步至與其他節點相同）：
+```json
+{"block_count": 21, "node": "node4", "status": "ok"}
+```
+
+網頁節點管理頁面刷新後，node4 也會出現在清單中（綠燈上線）。
+
+**步驟四：確認後續新交易也推送到 node4**
+
+在瀏覽器任一節點執行一筆轉帳，再確認 node4 也同步到相同區塊數：
+
+```bash
+curl http://localhost:5004/health
+```
+
+**展示結束後清理 node4**
+
+```bash
+docker stop node4 && docker rm node4 && docker volume rm client4_data
 ```
 
 ---
