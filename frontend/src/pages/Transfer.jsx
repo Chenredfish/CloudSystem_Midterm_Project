@@ -6,8 +6,9 @@ import {
 import SendIcon from '@mui/icons-material/Send';
 import api from '../api';
 
-export default function Transfer() {
-  const [form, setForm]       = useState({ sender: '', receiver: '', amount: '' });
+export default function Transfer({ role }) {
+  const isAdmin = role === 'admin';
+  const [form, setForm]       = useState({ sender: '', receiver: '', amount: '', password: '' });
   const [result, setResult]   = useState(null);
   const [error, setError]     = useState('');
   const [loading, setLoading] = useState(false);
@@ -22,13 +23,15 @@ export default function Transfer() {
     setResult(null);
     setLoading(true);
     try {
-      const res = await api.post('/api/transfer', {
+      const payload = {
         sender:   form.sender.trim(),
         receiver: form.receiver.trim(),
         amount:   Number(form.amount),
-      });
+      };
+      if (!isAdmin) payload.password = form.password;
+      const res = await api.post('/api/transfer', payload);
       setResult(res.data);
-      setForm({ sender: '', receiver: '', amount: '' });
+      setForm({ sender: '', receiver: '', amount: '', password: '' });
     } catch (err) {
       setError(err.response?.data?.message || err.response?.data?.error || '轉帳失敗');
     } finally {
@@ -76,6 +79,17 @@ export default function Transfer() {
               required
               inputProps={{ min: 1 }}
             />
+            {!isAdmin && (
+              <TextField
+                label="付款方密碼"
+                name="password"
+                type="password"
+                value={form.password}
+                onChange={handleChange}
+                required
+                helperText="帳戶密碼由管理員設定"
+              />
+            )}
             <Divider />
             <Button
               type="submit"

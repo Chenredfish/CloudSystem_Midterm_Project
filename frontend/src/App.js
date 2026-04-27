@@ -82,7 +82,7 @@ function Layout({ user, onLogout }) {
         <Toolbar />
         <Routes>
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/transfer"  element={<Transfer />} />
+          <Route path="/transfer"  element={<Transfer role={user.role} />} />
           <Route path="/balance"   element={<Balance />} />
           <Route path="/verify"    element={<Verify role={user.role} />} />
           <Route path="/nodes"     element={<Nodes />} />
