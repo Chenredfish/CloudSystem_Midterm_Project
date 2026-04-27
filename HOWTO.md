@@ -48,13 +48,13 @@ docker ps
 
 ## 第二步：確認系統健康
 
-進入 node1 容器：
+> **Port 說明**：Flask 在容器**內部**監聽 `5000`；從你的電腦（host）連線時才用 `5001` / `5002` / `5003`。
+
+**方法 A：從容器內部確認（推薦用於 demo）**
 
 ```bash
 docker exec -it node1 bash
 ```
-
-在容器內確認 Flask 服務正常：
 
 ```bash
 curl http://localhost:5000/health
@@ -65,11 +65,17 @@ curl http://localhost:5000/health
 {"status": "ok", "node": "node1", "block_count": 1}
 ```
 
-離開容器：
-
 ```bash
 exit
 ```
+
+**方法 B：不進入容器，從 host 直接確認**
+
+```bash
+docker exec node1 curl -s http://localhost:5000/health
+```
+
+或用瀏覽器開啟 **http://localhost:5001/health** 直接看 JSON。
 
 ---
 
