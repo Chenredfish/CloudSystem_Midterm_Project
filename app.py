@@ -48,6 +48,8 @@ NODE_ID = os.environ.get("NODE_ID", "unknown")
 PEERS = [p.strip() for p in os.environ.get("PEERS", "").split(",") if p.strip()]
 KNOWN_PEERS: list = list(PEERS)   # mutable in-memory; grows dynamically via F1 approve flow
 _peers_lock = threading.Lock()
+PENDING_NODES: list = []          # nodes awaiting admin approval
+_pending_lock = threading.Lock()
 
 
 def get_peers() -> list:
@@ -397,7 +399,9 @@ def api_nodes():
             })
         except Exception:
             nodes_info.append({"url": peer, "status": "offline", "node": None, "block_count": None})
-    return jsonify({"nodes": nodes_info})
+    with _pending_lock:
+        pending = list(PENDING_NODES)
+    return jsonify({"nodes": nodes_info, "pending": pending})
 
 
 @app.route("/api/nodes/approve", methods=["POST"])
@@ -414,6 +418,9 @@ def api_nodes_approve():
             return jsonify({"error": "該節點已在 peer 名單中"}), 409
         KNOWN_PEERS.append(new_url)
         current_peers = list(KNOWN_PEERS)
+    with _pending_lock:
+        if new_url in PENDING_NODES:
+            PENDING_NODES.remove(new_url)
 
     # Broadcast new node to all existing peers
     for peer in current_peers:
@@ -449,6 +456,23 @@ def nodes_notify():
             KNOWN_PEERS.append(url)
     logger.info(f"Peer added via notify: {url}")
     return jsonify({"status": "ok"})
+
+
+@app.route("/nodes/join", methods=["POST"])
+def nodes_join():
+    """New node self-registers as pending for admin approval."""
+    data = request.json or {}
+    url = data.get("url", "").strip().rstrip("/")
+    if not url:
+        return jsonify({"error": "缺少 url"}), 400
+    with _peers_lock:
+        if url in KNOWN_PEERS:
+            return jsonify({"status": "already_known"}), 200
+    with _pending_lock:
+        if url not in PENDING_NODES:
+            PENDING_NODES.append(url)
+            logger.info(f"Node pending approval: {url}")
+    return jsonify({"status": "pending"})
 
 
 @app.route("/nodes/welcome", methods=["POST"])
@@ -530,4 +554,18 @@ if __name__ == "__main__":
     logger.info(f"Node {NODE_ID} starting | ledger: {os.environ.get('LEDGER_PATH', '/storage')} | peers: {PEERS}")
     init_ledger()
     logger.info("Ledger initialized")
+
+    admin_url = os.environ.get("ADMIN_URL", "").strip().rstrip("/")
+    if admin_url:
+        def _auto_join():
+            import time
+            time.sleep(3)  # wait for self to finish starting
+            self_url = f"http://{NODE_ID}:5000"
+            try:
+                requests.post(f"{admin_url}/nodes/join", json={"url": self_url}, timeout=5)
+                logger.info(f"Auto-registered as pending at {admin_url}")
+            except Exception as e:
+                logger.warning(f"Auto-register at {admin_url} failed: {e}")
+        threading.Thread(target=_auto_join, daemon=True).start()
+
     app.run(host="0.0.0.0", port=5000)

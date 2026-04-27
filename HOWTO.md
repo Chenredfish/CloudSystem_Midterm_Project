@@ -471,7 +471,7 @@ exit
 
 > 以下指令在 **host 終端（PowerShell）**執行，不需要進入容器。
 
-**步驟一：啟動 node4，初始無任何 peer**
+**步驟一：啟動 node4，初始無任何 peer，並指定 admin 節點**
 
 ```powershell
 docker run -d `
@@ -482,10 +482,11 @@ docker run -d `
   -e NODE_ID=node4 `
   -e LEDGER_PATH=/storage `
   -e PEERS="" `
+  -e ADMIN_URL=http://node1:5000 `
   cloudsystem_midterm_project-node1
 ```
 
-確認 node4 啟動，但目前只有創世區塊：
+node4 啟動約 3 秒後會自動向 node1 的待審核佇列報名。確認 node4 啟動，但目前只有創世區塊：
 
 ```powershell
 docker exec node4 curl -s http://localhost:5000/health
@@ -501,8 +502,8 @@ docker exec node4 curl -s http://localhost:5000/health
 開啟 **http://localhost:5001**，以 `admin` 登入，進入左側「節點管理」：
 
 1. 目前節點清單顯示 node2、node3（綠燈、顯示各自區塊數）
-2. 在輸入框填入 `http://node4:5000`
-3. 按「核准加入」
+2. 頁面上方出現橘色「待審核節點」區塊，顯示 `http://node4:5000`（若未出現可按右上角重整）
+3. 點擊 node4 那列的「核准」按鈕
 
 系統在背景執行三件事：
 - node1 將 node4 加入自身 peer 名單

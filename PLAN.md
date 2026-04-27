@@ -150,14 +150,14 @@ CloudSystem_Midterm_Project/
 
 ### Phase 6 — 加分功能實作
 
-#### F1：動態節點加入
-- [ ] 後端：記憶體 `KNOWN_PEERS` 清單（初始值來自 `PEERS` 環境變數）
-- [ ] 後端：`GET /api/nodes`（列出 peer + 逐一 health check）
-- [ ] 後端：`POST /api/nodes/approve`（加入 peer → 廣播 `/nodes/notify` 給所有已知節點 → 傳完整 peer 清單給新節點 `/nodes/welcome` → 觸發新節點 `GET /sync/blocks` 同步鏈）
-- [ ] 後端：`POST /nodes/notify`（接收新 peer 通知，更新本節點 `KNOWN_PEERS`）
-- [ ] 後端：`POST /nodes/welcome`（接收完整 peer 清單，初始化 `KNOWN_PEERS` 並立即同步區塊鏈）
-- [ ] 前端：Admin「節點管理」頁面（節點卡片 + 健康燈號 + 區塊數 + 批准輸入框）
-- [ ] `push_block_to_peers` 改用動態 `KNOWN_PEERS`（而非固定 `PEERS` 環境變數）
+#### F1：動態節點加入 ✅
+- [x] 後端：記憶體 `KNOWN_PEERS` 清單（初始值來自 `PEERS` 環境變數）
+- [x] 後端：`GET /api/nodes`（列出 peer + 逐一 health check）
+- [x] 後端：`POST /api/nodes/approve`（加入 peer → 廣播 `/nodes/notify` 給所有已知節點 → 傳完整 peer 清單給新節點 `/nodes/welcome` → 觸發新節點 `GET /sync/blocks` 同步鏈）
+- [x] 後端：`POST /nodes/notify`（接收新 peer 通知，更新本節點 `KNOWN_PEERS`）
+- [x] 後端：`POST /nodes/welcome`（接收完整 peer 清單，初始化 `KNOWN_PEERS` 並立即同步區塊鏈）
+- [x] 前端：Admin「節點管理」頁面（節點卡片 + 健康燈號 + 區塊數 + 批准輸入框）
+- [x] `push_block_to_peers` 改用動態 `KNOWN_PEERS`（而非固定 `PEERS` 環境變數）
 
 #### F2-密碼：帳戶密碼系統
 - [ ] 後端：記憶體 `ACCOUNT_PASSWORDS`（dict）+ `FROZEN_ACCOUNTS`（set）

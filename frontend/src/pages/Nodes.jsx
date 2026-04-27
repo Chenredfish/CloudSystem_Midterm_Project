@@ -10,13 +10,15 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import AddIcon from '@mui/icons-material/Add';
+import PendingIcon from '@mui/icons-material/HourglassEmpty';
 import api from '../api';
 
 export default function Nodes() {
   const [nodes, setNodes]       = useState([]);
+  const [pending, setPending]   = useState([]);
   const [loading, setLoading]   = useState(false);
   const [newUrl, setNewUrl]     = useState('');
-  const [approving, setApproving] = useState(false);
+  const [approving, setApproving] = useState(''); // url being approved, or ''
   const [error, setError]       = useState('');
   const [success, setSuccess]   = useState('');
 
@@ -26,6 +28,7 @@ export default function Nodes() {
     try {
       const res = await api.get('/api/nodes');
       setNodes(res.data.nodes || []);
+      setPending(res.data.pending || []);
     } catch (err) {
       setError(err.response?.data?.error || '無法取得節點資訊');
     } finally {
@@ -35,20 +38,21 @@ export default function Nodes() {
 
   useEffect(() => { fetchNodes(); }, [fetchNodes]);
 
-  const handleApprove = async () => {
-    if (!newUrl.trim()) return;
-    setApproving(true);
+  const handleApprove = async (url) => {
+    const target = url || newUrl.trim();
+    if (!target) return;
+    setApproving(target);
     setError('');
     setSuccess('');
     try {
-      const res = await api.post('/api/nodes/approve', { url: newUrl.trim() });
+      const res = await api.post('/api/nodes/approve', { url: target });
       setSuccess(`節點 ${res.data.url} 已核准並開始同步`);
-      setNewUrl('');
+      if (!url) setNewUrl('');
       await fetchNodes();
     } catch (err) {
       setError(err.response?.data?.error || '核准失敗');
     } finally {
-      setApproving(false);
+      setApproving('');
     }
   };
 
@@ -119,11 +123,62 @@ export default function Nodes() {
         </CardContent>
       </Card>
 
+      {/* Pending nodes */}
+      {pending.length > 0 && (
+        <Card sx={{ mb: 3 }}>
+          <CardHeader
+            avatar={<PendingIcon color="warning" />}
+            title="待審核節點"
+            titleTypographyProps={{ variant: 'subtitle1' }}
+            action={
+              <Chip
+                label={`${pending.length} 個待審核`}
+                size="small"
+                color="warning"
+                variant="outlined"
+              />
+            }
+          />
+          <Divider />
+          <CardContent sx={{ p: 0 }}>
+            <List dense disablePadding>
+              {pending.map((url, idx) => (
+                <React.Fragment key={url}>
+                  {idx > 0 && <Divider component="li" />}
+                  <ListItem
+                    secondaryAction={
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="warning"
+                        onClick={() => handleApprove(url)}
+                        disabled={approving === url}
+                        startIcon={approving === url ? <CircularProgress size={14} /> : <AddIcon />}
+                      >
+                        核准
+                      </Button>
+                    }
+                  >
+                    <ListItemIcon sx={{ minWidth: 36 }}>
+                      <PendingIcon color="warning" fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={url}
+                      primaryTypographyProps={{ fontSize: 14 }}
+                    />
+                  </ListItem>
+                </React.Fragment>
+              ))}
+            </List>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Add new node */}
       <Card>
         <CardHeader
           avatar={<AddIcon color="primary" />}
-          title="核准新節點加入"
+          title="手動核准節點加入"
           titleTypographyProps={{ variant: 'subtitle1' }}
         />
         <Divider />
@@ -139,13 +194,13 @@ export default function Nodes() {
               onChange={e => setNewUrl(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleApprove()}
               sx={{ flexGrow: 1 }}
-              disabled={approving}
+              disabled={!!approving}
             />
             <Button
               variant="contained"
-              onClick={handleApprove}
-              disabled={approving || !newUrl.trim()}
-              startIcon={approving ? <CircularProgress size={18} /> : <AddIcon />}
+              onClick={() => handleApprove()}
+              disabled={!!approving || !newUrl.trim()}
+              startIcon={approving === newUrl ? <CircularProgress size={18} /> : <AddIcon />}
             >
               核准加入
             </Button>
