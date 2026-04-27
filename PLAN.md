@@ -202,10 +202,11 @@ CloudSystem_Midterm_Project/
 | `full_sync_done` | 新節點加入後完整鏈同步成功 |
 | `full_sync_failed` | 新節點加入後完整鏈同步失敗 |
 
-### Phase 5 — 收尾 + Demo 準備
-- [ ] Demo 步驟文件（README 更新，含 node4 加入流程指令）
-- [ ] 架構圖（含動態節點加入示意）
-- [ ] 完整 demo 流程演練
+### Phase 5 — 收尾 + Demo 準備 ✅
+- [x] README.md 完整重寫（系統說明、功能清單、技術選型、快速啟動）
+- [x] AI_USAGE.md 完整 AI 協作紀錄（依 git 時間線 8 個階段）
+- [x] HOWTO.md 完整 demo 流程（助教版 + 老師版，含 F1/F2 進階功能）
+- [x] PLAN.md 技術決策文件齊全
 
 ---
 

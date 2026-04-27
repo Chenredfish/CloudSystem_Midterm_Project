@@ -617,7 +617,7 @@ docker stop node4; docker rm node4; docker volume rm client4_data
    - 凍結 / 解凍（紅色 / 綠色 chip）— 顯示目標帳戶與執行者 `admin`
 3. 每筆記錄顯示精確到秒的時間戳記，可向老師說明：任何管理操作都有跡可查，不可抵賴
 
-按右上角重新整理可獲取最新日誌；日誌上限 200 筆（in-memory，重啟歸零）。
+按右上角重新整理可獲取最新日誌；日誌上限 200 筆，**持久化至 volume**（容器重啟後恢復，只有 `docker-compose down -v` 才會清空）。
 
 ---
 
