@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>分散式共享帳本系統 — 雲端系統期中專題</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif; background: #1a1a2e; color: #eee; }
+
+  .slide {
+    width: 960px; min-height: 540px;
+    margin: 32px auto; padding: 48px 56px;
+    background: #16213e; border-radius: 12px;
+    border: 1px solid #0f3460;
+    display: flex; flex-direction: column; justify-content: center;
+    position: relative; page-break-after: always;
+  }
+
+  /* ── Accent colours ── */
+  .accent  { color: #e94560; }
+  .blue    { color: #4fc3f7; }
+  .green   { color: #a5d6a7; }
+  .yellow  { color: #fff59d; }
+  .orange  { color: #ffcc80; }
+
+  /* ── Slide number ── */
+  .slide-num {
+    position: absolute; top: 16px; right: 24px;
+    font-size: 12px; color: #555; letter-spacing: 1px;
+  }
+
+  /* ── Title slide ── */
+  .slide.title { text-align: center; background: linear-gradient(135deg,#0f3460 0%,#16213e 60%); }
+  .slide.title h1 { font-size: 42px; font-weight: 800; color: #e94560; margin-bottom: 12px; }
+  .slide.title .subtitle { font-size: 20px; color: #4fc3f7; margin-bottom: 32px; }
+  .slide.title .meta { font-size: 15px; color: #aaa; line-height: 2; }
+
+  /* ── Section header ── */
+  h2 { font-size: 26px; font-weight: 700; color: #4fc3f7; border-left: 4px solid #e94560;
+       padding-left: 14px; margin-bottom: 28px; }
+  h3 { font-size: 17px; font-weight: 700; color: #fff59d; margin-bottom: 10px; }
+
+  /* ── Two-column layout ── */
+  .cols { display: grid; gap: 28px; }
+  .cols-2 { grid-template-columns: 1fr 1fr; }
+  .cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+  /* ── Bullet list ── */
+  ul { list-style: none; padding: 0; }
+  ul li { padding: 5px 0 5px 22px; position: relative; font-size: 15px; line-height: 1.6; }
+  ul li::before { content: "▸"; position: absolute; left: 0; color: #e94560; }
+  ul li.sub { padding-left: 40px; font-size: 13px; color: #bbb; }
+  ul li.sub::before { content: "–"; color: #555; }
+
+  /* ── Card ── */
+  .card {
+    background: #0f3460; border-radius: 8px; padding: 18px 20px;
+    border: 1px solid #1a4a7a;
+  }
+  .card.green-card { background: #1b3a2a; border-color: #2e7d32; }
+  .card.red-card   { background: #3a1b1b; border-color: #7d2e2e; }
+
+  /* ── Image placeholder ── */
+  .img-box {
+    background: #0a1628; border: 2px dashed #4fc3f7;
+    border-radius: 8px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 8px;
+    color: #4fc3f7; font-size: 13px; text-align: center; padding: 12px;
+  }
+  .img-box .icon { font-size: 32px; }
+  .img-box small { color: #666; font-size: 11px; margin-top: 2px; }
+
+  /* ── Tag pill ── */
+  .tag {
+    display: inline-block; padding: 3px 10px; border-radius: 20px;
+    font-size: 12px; font-weight: 700; margin: 2px;
+  }
+  .tag.red    { background:#7d2e2e; color:#ff8a80; border:1px solid #e94560; }
+  .tag.blue   { background:#0a2a4a; color:#4fc3f7; border:1px solid #4fc3f7; }
+  .tag.green  { background:#1b3a2a; color:#a5d6a7; border:1px solid #66bb6a; }
+  .tag.yellow { background:#3a3000; color:#fff59d; border:1px solid #f9a825; }
+
+  /* ── Feature badge ── */
+  .badge {
+    background: #e94560; color: #fff; border-radius: 6px;
+    font-size: 11px; font-weight: 800; padding: 2px 8px;
+    vertical-align: middle; margin-left: 6px; letter-spacing: 0.5px;
+  }
+
+  /* ── Full-page video slide ── */
+  .slide.video-slide { padding: 0; overflow: hidden; }
+  .video-placeholder {
+    width: 100%; height: 100%; min-height: 540px;
+    background: #050d1a;
+    border: 3px dashed #e94560;
+    border-radius: 12px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+  }
+  .video-placeholder .play-icon { font-size: 80px; color: #e94560; opacity: 0.6; }
+  .video-placeholder h2 { border: none; padding: 0; color: #e94560; font-size: 28px; }
+  .video-placeholder p  { color: #666; font-size: 14px; }
+
+  /* ── Footer label ── */
+  .footer-tag {
+    position: absolute; bottom: 16px; left: 56px;
+    font-size: 11px; color: #333; letter-spacing: 1px;
+  }
+
+  /* ── Divider ── */
+  hr { border: none; border-top: 1px solid #0f3460; margin: 20px 0; }
+
+  /* ── Highlight box ── */
+  .highlight {
+    background: linear-gradient(90deg,#3a0020,#0a1628);
+    border-left: 4px solid #e94560; border-radius: 0 8px 8px 0;
+    padding: 14px 18px; font-size: 15px; color: #ffcc80;
+  }
+
+  @media print { body { background: #fff; } }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════
+     Slide 1 ▸ 標題頁
+══════════════════════════════════════════════════ -->
+<div class="slide title">
+  <div class="slide-num">1 / 10</div>
+  <h1>分散式共享帳本系統</h1>
+  <p class="subtitle">Distributed Shared Ledger with Blockchain Concepts</p>
+  <hr style="border-color:#e94560;width:80px;margin:20px auto;">
+  <div class="meta">
+    雲端系統期中專題 &nbsp;|&nbsp; 2026 Spring<br>
+    <!-- ▼ 請填入姓名 / 學號 ▼ -->
+    <span style="color:#aaa;">姓名：＿＿＿＿＿　學號：＿＿＿＿＿＿</span>
+  </div>
+  <br>
+  <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:8px;">
+    <span class="tag blue">Docker Compose</span>
+    <span class="tag green">Python Flask</span>
+    <span class="tag yellow">React + MUI</span>
+    <span class="tag red">SHA-256 Blockchain</span>
+  </div>
+  <div class="footer-tag">CLOUD SYSTEMS MIDTERM PROJECT</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     Slide 2 ▸ 系統基本功能
+══════════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="slide-num">2 / 10</div>
+  <h2>系統基本功能</h2>
+  <div class="cols cols-2" style="align-items:start;">
+    <div>
+      <h3>核心評分功能</h3>
+      <ul>
+        <li><span class="blue">執行轉帳</span>：寫入區塊並觸發分散式推送</li>
+        <li><span class="green">餘額查詢</span>：掃描所有區塊計算當前餘額</li>
+        <li><span class="yellow">完整性驗證</span>：SHA-256 雜湊鏈逐塊比對</li>
+        <li><span class="orange">Angel 獎勵</span>：鏈驗證通過自動轉 10 元</li>
+        <li><span class="accent">竄改偵測</span>：修改任一欄位即觸發 Hash 不符</li>
+      </ul>
+      <br>
+      <h3>區塊格式</h3>
+      <div class="card" style="font-size:12px;font-family:monospace;color:#a5d6a7;line-height:2;">
+        Previous block: &lt;SHA-256&gt;<br>
+        alice, bob, 50<br>
+        carol, dave, 20<br>
+        Next block: &lt;SHA-256 | None&gt;<br>
+        Hashcode: &lt;SHA-256&gt;
+      </div>
+    </div>
+    <div class="img-box" style="min-height:260px;">
+      <div class="icon">🗂️</div>
+      <div>系統架構示意圖</div>
+      <small>【請補上架構截圖或手繪圖】<br>三節點 + Flask + Volume 示意</small>
+    </div>
+  </div>
+  <div class="footer-tag">CLOUD SYSTEMS MIDTERM PROJECT</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     Slide 3 ▸ 加分功能總覽
+══════════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="slide-num">3 / 10</div>
+  <h2>加分功能總覽 <span style="font-size:16px;color:#aaa;font-weight:400;">— 5 項進階設計</span></h2>
+  <div class="cols cols-3">
+    <div class="card">
+      <h3>① 真分散式架構</h3>
+      <ul>
+        <li>三節點物理隔離<br>Named Volume</li>
+        <li>HTTP 即時推送同步</li>
+        <li>先到先得衝突策略</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>② React Web GUI</h3>
+      <ul>
+        <li>可視化操作介面</li>
+        <li>Admin / User 角色分流</li>
+        <li>8 個功能頁面</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>③ 跨節點驗證修復</h3>
+      <ul>
+        <li>三節點 Hash 比對</li>
+        <li>多數決自動修復<br>少數派節點</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>④ F1 動態節點加入</h3>
+      <ul>
+        <li>無需修改設定檔</li>
+        <li>管理員核准機制</li>
+        <li>完整鏈自動同步</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>⑤ F2 帳戶管理</h3>
+      <ul>
+        <li>密碼 / 凍結 / 稽核</li>
+        <li>Entry-node 驗證</li>
+        <li>凍結廣播全網</li>
+      </ul>
+    </div>
+    <div class="card green-card">
+      <h3 style="color:#a5d6a7;">佔分比重</h3>
+      <ul>
+        <li>進階功能共 <span class="accent">40%</span></li>
+        <li>GUI 提升操作體驗</li>
+        <li>分離儲存確保分散</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-tag">CLOUD SYSTEMS MIDTERM PROJECT</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     Slide 4 ▸ 真分散式架構 + 獨立儲存空間
+══════════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="slide-num">4 / 10</div>
+  <h2>真分散式架構 <span class="badge">加分</span></h2>
+  <div class="cols cols-2">
+    <div>
+      <h3>物理隔離儲存空間</h3>
+      <ul>
+        <li>每個節點獨立 <span class="blue">Named Volume</span>（非 bind mount）</li>
+        <li>三個 volume 完全物理隔離，資料不共享</li>
+        <li>即使同一台主機，帳本也真正分散</li>
+      </ul>
+      <br>
+      <h3>HTTP 即時同步機制</h3>
+      <ul>
+        <li>寫入後 <code style="color:#4fc3f7;">POST /sync/block</code> 廣播給所有 peer</li>
+        <li>衝突策略：先到先得（HTTP 409 拒絕）</li>
+        <li>fcntl.flock 並發保護，POSIX 標準鎖</li>
+      </ul>
+      <br>
+      <div class="highlight">
+        三節點各持有完整帳本副本，任一節點當機不影響整體服務
+      </div>
+    </div>
+    <div class="img-box" style="min-height:280px;">
+      <div class="icon">🗄️</div>
+      <div>三節點 + Volume 架構圖</div>
+      <small>【請補上 docker-compose 架構截圖<br>或 docker volume ls 執行結果】</small>
+    </div>
+  </div>
+  <div class="footer-tag">CLOUD SYSTEMS MIDTERM PROJECT</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     Slide 5 ▸ React Web GUI
+══════════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="slide-num">5 / 10</div>
+  <h2>React Web GUI — 可視化操作介面 <span class="badge">加分</span></h2>
+  <div class="cols cols-2">
+    <div>
+      <h3>8 個功能頁面</h3>
+      <ul>
+        <li><span class="green">Login</span> — 角色登入（Admin / User）</li>
+        <li><span class="blue">Dashboard</span> — 帳本總覽 + 節點狀態</li>
+        <li><span class="yellow">Transfer</span> — 執行轉帳（含帳戶密碼驗證）</li>
+        <li><span class="orange">Balance</span> — 餘額查詢</li>
+        <li><span class="accent">Verify</span> — 驗證 + 自動修復</li>
+        <li><span class="blue">Nodes</span> — 節點管理（F1 核准）</li>
+        <li><span class="green">Accounts</span> — 帳戶管理（F2 密碼/凍結）</li>
+        <li><span class="yellow">AuditLog</span> — 稽核日誌即時查閱</li>
+      </ul>
+      <br>
+      <h3>技術選型</h3>
+      <ul>
+        <li>React + Material UI（MUI）</li>
+        <li>multi-stage Dockerfile 內建 npm build</li>
+        <li>Flask 直接 serve 靜態 build 產物</li>
+      </ul>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div class="img-box" style="min-height:140px;">
+        <div class="icon">🖥️</div>
+        <div>Dashboard / 帳本總覽截圖</div>
+        <small>【請補上瀏覽器截圖】</small>
+      </div>
+      <div class="img-box" style="min-height:100px;">
+        <div class="icon">💳</div>
+        <div>Transfer / Verify 頁面截圖</div>
+        <small>【請補上瀏覽器截圖】</small>
+      </div>
+    </div>
+  </div>
+  <div class="footer-tag">CLOUD SYSTEMS MIDTERM PROJECT</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     Slide 6 ▸ 跨節點完整性驗證
+══════════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="slide-num">6 / 10</div>
+  <h2>跨節點完整性驗證與自動修復 <span class="badge">加分</span></h2>
+  <div class="cols cols-2">
+    <div>
+      <h3>多數決演算法</h3>
+      <ul>
+        <li>蒐集所有節點的每個區塊 <span class="blue">computed hash</span></li>
+        <li>同一位置 hash 相符 ≥ 2/3 → 視為正確版本</li>
+        <li>少數派節點用正確版本覆蓋並修復鏈</li>
+        <li>可偵測「內容被竄改但 hash 欄位未更新」情境</li>
+      </ul>
+      <br>
+      <h3>驗證流程</h3>
+      <ul>
+        <li>Step 1：對自身鏈做 SHA-256 逐塊驗證</li>
+        <li>Step 2：呼叫 <code style="color:#4fc3f7;">GET /chain/hashes</code> 蒐集各節點</li>
+        <li>Step 3：多數決找出正確版本</li>
+        <li>Step 4：自動修復 + 稽核日誌記錄</li>
+      </ul>
+      <div class="highlight" style="margin-top:14px;">
+        一鍵完成：單節點損壞 → 自動修復 → 重新驗證通過
+      </div>
+    </div>
+    <div class="img-box" style="min-height:280px;">
+      <div class="icon">🔍</div>
+      <div>跨節點比對 / 修復截圖</div>
+      <small>【請補上 Verify 頁面<br>顯示三節點 hash 比對結果的截圖】</small>
+    </div>
+  </div>
+  <div class="footer-tag">CLOUD SYSTEMS MIDTERM PROJECT</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     Slide 7 ▸ F1 動態節點加入
+══════════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="slide-num">7 / 10</div>
+  <h2>F1：動態節點加入 <span class="badge">加分</span></h2>
+  <div class="cols cols-2">
+    <div>
+      <h3>設計理念</h3>
+      <ul>
+        <li>節點運營者自行啟動 node4 容器，<br>無需修改 <code style="color:#4fc3f7;">docker-compose.yml</code></li>
+        <li>向任一現有節點 POST <code style="color:#4fc3f7;">/nodes/join</code> 申請加入</li>
+        <li>管理員在 Web UI 審核，核准後廣播全網</li>
+        <li>新節點自動拉取完整鏈並開始參與同步</li>
+      </ul>
+      <br>
+      <h3>流程步驟</h3>
+      <ul>
+        <li><span class="green">①</span> node4 容器啟動 → POST /nodes/join</li>
+        <li><span class="yellow">②</span> 加入 PENDING_NODES（持久化至 volume）</li>
+        <li><span class="orange">③</span> Admin 在 Nodes 頁面點擊「核准」</li>
+        <li><span class="blue">④</span> 廣播 /nodes/welcome → node4 接收完整鏈</li>
+        <li><span class="accent">⑤</span> node4 加入 KNOWN_PEERS，正常同步</li>
+      </ul>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div class="img-box" style="min-height:140px;">
+        <div class="icon">🔗</div>
+        <div>Nodes 管理頁面截圖</div>
+        <small>【請補上 node4 申請等待核准畫面】</small>
+      </div>
+      <div class="img-box" style="min-height:100px;">
+        <div class="icon">✅</div>
+        <div>node4 核准後同步截圖</div>
+        <small>【請補上 node4 同步完成<br>或 docker ps 顯示 4 個節點】</small>
+      </div>
+    </div>
+  </div>
+  <div class="footer-tag">CLOUD SYSTEMS MIDTERM PROJECT</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     Slide 8 ▸ F2 帳戶管理系統
+══════════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="slide-num">8 / 10</div>
+  <h2>F2：帳戶管理系統 <span class="badge">加分</span></h2>
+  <div class="cols cols-3">
+    <div class="card">
+      <h3>🔑 密碼管理</h3>
+      <ul>
+        <li>SHA-256 儲存</li>
+        <li>Entry-node 驗證<br><span style="font-size:12px;color:#aaa;">（類 Hyperledger Fabric MSP）</span></li>
+        <li>密碼不跨節點同步，避免中間人攻擊</li>
+        <li>Admin 轉帳免密碼</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>🔒 帳戶凍結</h3>
+      <ul>
+        <li>凍結廣播全網所有節點</li>
+        <li>任一節點拒絕凍結帳戶付款</li>
+        <li>解凍同樣廣播全網</li>
+        <li>持久化至 volume</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>📋 稽核日誌</h3>
+      <ul>
+        <li>記錄 20 種系統事件</li>
+        <li>認證 / 轉帳 / 鏈操作<br>/ 同步 / 節點管理</li>
+        <li>持久化至 volume<br>（重啟後恢復）</li>
+        <li>Web UI 即時查閱</li>
+      </ul>
+    </div>
+  </div>
+  <br>
+  <div class="img-box" style="min-height:100px;flex-direction:row;gap:24px;">
+    <div style="text-align:center;">
+      <div class="icon">👤</div>
+      <div style="font-size:12px;">Accounts 頁面截圖</div>
+      <small>【請補上帳戶管理介面截圖】</small>
+    </div>
+    <div style="text-align:center;">
+      <div class="icon">📜</div>
+      <div style="font-size:12px;">AuditLog 頁面截圖</div>
+      <small>【請補上稽核日誌列表截圖】</small>
+    </div>
+  </div>
+  <div class="footer-tag">CLOUD SYSTEMS MIDTERM PROJECT</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     Slide 9 ▸ Demo 影片（整頁保留）
+══════════════════════════════════════════════════ -->
+<div class="slide video-slide">
+  <div class="video-placeholder">
+    <div class="play-icon">▶</div>
+    <h2>系統 Demo 影片</h2>
+    <p style="color:#888;">【請將錄製的 Demo 影片嵌入此頁】</p>
+    <br>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+      <span class="tag blue">轉帳 × 6</span>
+      <span class="tag green">餘額查詢</span>
+      <span class="tag yellow">鏈驗證 + Angel 獎勵</span>
+      <span class="tag red">竄改偵測</span>
+      <span class="tag blue">跨節點修復</span>
+      <span class="tag green">F1 動態加入</span>
+      <span class="tag yellow">F2 凍結 / 稽核</span>
+    </div>
+    <div style="position:absolute;top:14px;right:20px;font-size:12px;color:#333;">9 / 10</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     Slide 10 ▸ AI 使用說明 + GitHub
+══════════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="slide-num">10 / 10</div>
+  <h2>AI 輔助工具與程式碼位置</h2>
+  <div class="cols cols-2">
+    <div>
+      <h3>AI 使用說明</h3>
+      <ul>
+        <li>工具：<span class="blue">Claude Code</span>（claude-sonnet-4-6, Anthropic）</li>
+        <li>全程協作，共約 <span class="yellow">42 次 commit</span>，4 天開發</li>
+      </ul>
+      <br>
+      <h3>AI 介入範疇</h3>
+      <ul>
+        <li><span class="green">Phase 1–2</span>：帳本核心、Flask API 架構設計</li>
+        <li><span class="blue">Phase 3</span>：React 前端元件與 API 串接</li>
+        <li><span class="yellow">Phase 4</span>：CLI 腳本、分散式同步邏輯</li>
+        <li><span class="orange">F1</span>：動態節點設計方案討論與實作</li>
+        <li><span class="accent">F2</span>：帳戶管理分散式哲學討論 + 完整實作</li>
+        <li><span class="blue">Phase 5</span>：文件撰寫、bug 排查、commit 管理</li>
+      </ul>
+      <br>
+      <h3>AI 未介入的部分</h3>
+      <ul>
+        <li>題目理解與功能優先序判斷（由學生決定）</li>
+        <li>最終設計決策（AI 提供選項，學生做決定）</li>
+        <li>Demo 現場操作</li>
+      </ul>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px;justify-content:center;">
+      <div class="card green-card">
+        <h3 style="color:#a5d6a7;">📁 程式碼位置</h3>
+        <ul>
+          <li>GitHub Repository：</li>
+          <li style="padding-left:40px;font-size:13px;color:#4fc3f7;">
+            <!-- ▼ 請填入 GitHub 連結 ▼ -->
+            <em style="color:#555;">【請填入 GitHub URL】</em>
+          </li>
+          <li>詳細 AI 紀錄：<code style="color:#a5d6a7;">AI_USAGE.md</code></li>
+          <li>設計決策：<code style="color:#a5d6a7;">PLAN.md</code></li>
+          <li>操作手冊：<code style="color:#a5d6a7;">HOWTO.md</code></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>📊 開發統計</h3>
+        <ul>
+          <li>開發期間：4 天（2026/04/24–27）</li>
+          <li>Git Commits：42 次</li>
+          <li>程式行數：Flask ~1,200行 + React ~2,000行</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="footer-tag">CLOUD SYSTEMS MIDTERM PROJECT</div>
+</div>
+
+</body>
+</html>
