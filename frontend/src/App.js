@@ -11,6 +11,8 @@ import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import LogoutIcon from '@mui/icons-material/Logout';
 import HubIcon from '@mui/icons-material/Hub';
+import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
+import HistoryIcon from '@mui/icons-material/History';
 
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -18,6 +20,8 @@ import Transfer from './pages/Transfer';
 import Balance from './pages/Balance';
 import Verify from './pages/Verify';
 import Nodes from './pages/Nodes';
+import Accounts from './pages/Accounts';
+import AuditLog from './pages/AuditLog';
 import api from './api';
 
 const DRAWER_WIDTH = 220;
@@ -31,7 +35,9 @@ const NAV_ITEMS = [
   { label: '執行轉帳',   path: '/transfer',  icon: <SendIcon /> },
   { label: '餘額查詢',   path: '/balance',   icon: <AccountBalanceWalletIcon /> },
   { label: '驗證 / 修復', path: '/verify',   icon: <VerifiedIcon /> },
-  { label: '節點管理',   path: '/nodes',     icon: <HubIcon />, adminOnly: true },
+  { label: '節點管理',   path: '/nodes',     icon: <HubIcon />,             adminOnly: true },
+  { label: '帳戶管理',   path: '/accounts',  icon: <ManageAccountsIcon />,  adminOnly: true },
+  { label: '稽核日誌',   path: '/audit',     icon: <HistoryIcon />,         adminOnly: true },
 ];
 
 function Layout({ user, onLogout }) {
@@ -86,6 +92,8 @@ function Layout({ user, onLogout }) {
           <Route path="/balance"   element={<Balance />} />
           <Route path="/verify"    element={<Verify role={user.role} />} />
           <Route path="/nodes"     element={<Nodes />} />
+          <Route path="/accounts"  element={<Accounts />} />
+          <Route path="/audit"     element={<AuditLog />} />
           <Route path="*"          element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Box>
