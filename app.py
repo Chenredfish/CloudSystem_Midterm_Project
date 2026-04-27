@@ -176,6 +176,20 @@ def api_transfer():
     if sender == receiver:
         return jsonify({"error": "轉出帳戶與收款帳戶不能相同"}), 400
 
+    # ── Phase 6 F2 validation placeholder ───────────────────────────────────
+    # IMPORTANT: admin check MUST come first — it bypasses both freeze and
+    # password checks. Do NOT access data["password"] before this block.
+    #
+    # if session.get("role") != "admin":
+    #     if sender in FROZEN_ACCOUNTS:
+    #         return jsonify({"error": "帳戶已凍結"}), 400
+    #     if sender not in ACCOUNT_PASSWORDS:
+    #         return jsonify({"error": "帳戶未啟用，請聯繫管理員"}), 400
+    #     pw_hash = hashlib.sha256(data.get("password", "").encode()).hexdigest()
+    #     if pw_hash != ACCOUNT_PASSWORDS[sender]:
+    #         return jsonify({"error": "密碼錯誤"}), 400
+    # ────────────────────────────────────────────────────────────────────────
+
     result = transfer(sender, receiver, amount)
     if result["success"]:
         async_push(result["block_num"], also_prev=result.get("new_block_created", False))
