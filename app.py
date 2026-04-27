@@ -140,6 +140,7 @@ def _push_freeze_to_peers():
             logger.info(f"Freeze list synced to {peer}")
         except Exception as e:
             logger.warning(f"Freeze list sync to {peer} failed: {e}")
+            audit("system", "freeze_sync_failed", peer, str(e))
 
 
 def get_peers() -> list:
@@ -186,10 +187,12 @@ def push_block_to_peers(block: dict):
             r = requests.post(f"{peer}/sync/block", json=block, timeout=3)
             if r.status_code == 409:
                 logger.warning(f"Sync conflict with {peer} at block {block['block_num']}")
+                audit("system", "sync_conflict", peer, f"block={block['block_num']}")
             else:
                 logger.info(f"Synced block {block['block_num']} to {peer} → {r.status_code}")
         except Exception as e:
             logger.error(f"Sync to {peer} failed: {e}")
+            audit("system", "sync_failed", peer, f"block={block['block_num']} error={e}")
 
 
 def async_push(block_num: int, also_prev: bool = False):
@@ -212,10 +215,12 @@ def api_login():
     password = data.get("password", "")
     user = USERS.get(username)
     if not user or user["password"] != password:
+        audit(username or "?", "login_failed", username, "帳號或密碼錯誤")
         return jsonify({"error": "帳號或密碼錯誤"}), 401
     session["username"] = username
     session["role"] = user["role"]
     logger.info(f"Login: {username}")
+    audit(username, "login", username, f"role={user['role']}")
     return jsonify({"message": "登入成功", "role": user["role"], "username": username})
 
 
@@ -225,6 +230,7 @@ def api_logout():
     username = session.pop("username", None)
     session.pop("role", None)
     logger.info(f"Logout: {username}")
+    audit(username, "logout", username)
     return jsonify({"message": "已登出"})
 
 
@@ -282,11 +288,14 @@ def api_transfer():
             is_frozen  = sender in FROZEN_ACCOUNTS
             has_passwd = sender in ACCOUNT_PASSWORDS
         if is_frozen:
+            audit(session["username"], "transfer_rejected", f"{sender}→{receiver}", "帳戶已凍結")
             return jsonify({"error": "帳戶已凍結"}), 400
         if not has_passwd:
+            audit(session["username"], "transfer_rejected", f"{sender}→{receiver}", "帳戶未啟用")
             return jsonify({"error": "帳戶未啟用，請聯繫管理員設定密碼"}), 400
         pw_hash = hashlib.sha256(data.get("password", "").encode()).hexdigest()
         if pw_hash != ACCOUNT_PASSWORDS[sender]:
+            audit(session["username"], "transfer_rejected", f"{sender}→{receiver}", "密碼錯誤")
             return jsonify({"error": "密碼錯誤"}), 400
 
     result = transfer(sender, receiver, amount)
@@ -294,6 +303,7 @@ def api_transfer():
         async_push(result["block_num"], also_prev=result.get("new_block_created", False))
         audit(session["username"], "transfer", f"{sender}→{receiver}", f"amount={amount} block={result['block_num']}")
         return jsonify(result), 200
+    audit(session["username"], "transfer_failed", f"{sender}→{receiver}", result.get("error", ""))
     return jsonify(result), 400
 
 # ---------------------------------------------------------------------------
@@ -303,13 +313,18 @@ def api_transfer():
 @login_required
 def api_verify():
     result = verify_chain()
+    username = session["username"]
     if result["valid"]:
-        username = session["username"]
         reward = transfer("angel", username, 10)
         result["reward"] = reward
         if reward["success"]:
             logger.info(f"checkChain reward: angel → {username} 10")
             async_push(reward["block_num"], also_prev=reward.get("new_block_created", False))
+            audit(username, "verify_chain", "local", f"valid, reward block={reward['block_num']}")
+        else:
+            audit(username, "verify_chain", "local", f"valid, reward failed: {reward.get('error','')}")
+    else:
+        audit(username, "verify_chain", "local", f"invalid: {result.get('error', result)}")
     return jsonify(result)
 
 
@@ -362,6 +377,8 @@ def api_compare():
                 "peer_hashes": peer_hashes,
             })
 
+    audit(session["username"], "compare_chain", "all_nodes",
+          f"consistent={len(diffs)==0} diffs={len(diffs)} unreachable={unreachable}")
     return jsonify({
         "consistent":  len(diffs) == 0,
         "block_count": len(local_blocks),
@@ -424,6 +441,7 @@ def api_repair():
             repaired.append(num)
             logger.warning(f"Repaired block {num} from majority {majority['nodes']}")
 
+    audit(session["username"], "repair_chain", "all_nodes", f"repaired={repaired}")
     return jsonify({"repaired_blocks": repaired, "repaired_count": len(repaired)})
 
 # ---------------------------------------------------------------------------
@@ -491,6 +509,7 @@ def sync_account_state_post():
         FROZEN_ACCOUNTS.update(frozen)
     _save_account_state()
     logger.info(f"Freeze list replaced from peer: {len(frozen)} frozen accounts")
+    audit("peer", "freeze_sync_received", "frozen_accounts", f"count={len(frozen)}")
     return jsonify({"status": "ok"})
 
 # ---------------------------------------------------------------------------
@@ -554,6 +573,7 @@ def api_nodes_approve():
         return jsonify({"error": f"節點 {new_url} 無法連線", "detail": str(e)}), 503
 
     logger.info(f"Approved new node: {new_url}")
+    audit(session["username"], "node_approved", new_url, f"known_peers={len(current_peers)}")
     return jsonify({"status": "ok", "url": new_url, "known_peers": current_peers})
 
 
@@ -585,6 +605,7 @@ def nodes_join():
         if url not in PENDING_NODES:
             PENDING_NODES.append(url)
             logger.info(f"Node pending approval: {url}")
+    audit("system", "node_join_request", url)
     _save_account_state()
     return jsonify({"status": "pending"})
 
@@ -709,6 +730,7 @@ def nodes_welcome():
                             b["transactions"], b.get("next_hash"),
                         )
                 logger.info(f"Full sync from {peer}: {len(blocks)} blocks written")
+                audit("system", "full_sync_done", peer, f"{len(blocks)} blocks")
                 # Pull frozen list from the same peer (passwords stay on their origin node)
                 try:
                     rs = requests.get(f"{peer}/sync/account_state", timeout=5)
@@ -720,9 +742,11 @@ def nodes_welcome():
                     logger.info(f"Freeze list pulled from {peer}: {len(frozen)} accounts")
                 except Exception as ae:
                     logger.warning(f"Freeze list pull from {peer} failed: {ae}")
+                    audit("system", "freeze_pull_failed", peer, str(ae))
                 return
             except Exception as e:
                 logger.error(f"Full sync from {peer} failed: {e}")
+                audit("system", "full_sync_failed", peer, str(e))
 
     threading.Thread(target=_full_sync, daemon=True).start()
     return jsonify({"status": "ok", "peers": get_peers()})
