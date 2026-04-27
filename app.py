@@ -495,6 +495,84 @@ def nodes_join():
     return jsonify({"status": "pending"})
 
 
+# ---------------------------------------------------------------------------
+# F2 — Admin account management routes
+# ---------------------------------------------------------------------------
+@app.route("/api/admin/accounts")
+@admin_required
+def api_admin_accounts():
+    """List all accounts that appear in the ledger with their status."""
+    blocks = get_all_blocks()
+    accounts_set = set()
+    for block in blocks:
+        for tx in block["transactions"]:
+            parts = [p.strip() for p in tx.split(",")]
+            if len(parts) == 3:
+                accounts_set.add(parts[0])
+                accounts_set.add(parts[1])
+    with _accounts_lock:
+        result = []
+        for acct in sorted(accounts_set):
+            result.append({
+                "account":      acct,
+                "balance":      get_balance(acct),
+                "has_password": acct in ACCOUNT_PASSWORDS,
+                "frozen":       acct in FROZEN_ACCOUNTS,
+            })
+    return jsonify({"accounts": result})
+
+
+@app.route("/api/admin/account/password", methods=["POST"])
+@admin_required
+def api_admin_set_password():
+    """Admin sets or changes an account's password."""
+    data = request.json or {}
+    account  = data.get("account",  "").strip()
+    password = data.get("password", "")
+    if not account or not password:
+        return jsonify({"error": "缺少帳戶名稱或密碼"}), 400
+    pw_hash = hashlib.sha256(password.encode()).hexdigest()
+    with _accounts_lock:
+        ACCOUNT_PASSWORDS[account] = pw_hash
+    audit(session["username"], "set_password", account)
+    logger.info(f"Password set for account: {account}")
+    return jsonify({"status": "ok", "account": account})
+
+
+@app.route("/api/admin/freeze", methods=["POST"])
+@admin_required
+def api_admin_freeze():
+    data    = request.json or {}
+    account = data.get("account", "").strip()
+    if not account:
+        return jsonify({"error": "缺少帳戶名稱"}), 400
+    with _accounts_lock:
+        FROZEN_ACCOUNTS.add(account)
+    audit(session["username"], "freeze", account)
+    logger.info(f"Account frozen: {account}")
+    return jsonify({"status": "ok", "account": account})
+
+
+@app.route("/api/admin/unfreeze", methods=["POST"])
+@admin_required
+def api_admin_unfreeze():
+    data    = request.json or {}
+    account = data.get("account", "").strip()
+    if not account:
+        return jsonify({"error": "缺少帳戶名稱"}), 400
+    with _accounts_lock:
+        FROZEN_ACCOUNTS.discard(account)
+    audit(session["username"], "unfreeze", account)
+    logger.info(f"Account unfrozen: {account}")
+    return jsonify({"status": "ok", "account": account})
+
+
+@app.route("/api/admin/audit")
+@admin_required
+def api_admin_audit():
+    return jsonify({"logs": list(AUDIT_LOG)})
+
+
 @app.route("/nodes/welcome", methods=["POST"])
 def nodes_welcome():
     """New node receives full peer list; initialises KNOWN_PEERS and syncs chain."""
