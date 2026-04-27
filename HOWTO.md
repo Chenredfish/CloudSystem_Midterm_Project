@@ -469,26 +469,26 @@ exit
 
 模擬新節點在運行中的系統動態加入，並自動同步完整帳本。
 
-> 以下指令在 **host 終端**執行（不需要進入容器）。
+> 以下指令在 **host 終端（PowerShell）**執行，不需要進入容器。
 
 **步驟一：啟動 node4，初始無任何 peer**
 
-```bash
-docker run -d \
-  --name node4 \
-  --network cloudsystem_midterm_project_ledger_net \
-  -p 5004:5000 \
-  -v client4_data:/storage \
-  -e NODE_ID=node4 \
-  -e LEDGER_PATH=/storage \
-  -e PEERS="" \
+```powershell
+docker run -d `
+  --name node4 `
+  --network cloudsystem_midterm_project_ledger_net `
+  -p 5004:5000 `
+  -v client4_data:/storage `
+  -e NODE_ID=node4 `
+  -e LEDGER_PATH=/storage `
+  -e PEERS="" `
   cloudsystem_midterm_project-node1
 ```
 
 確認 node4 啟動，但目前只有創世區塊：
 
-```bash
-curl http://localhost:5004/health
+```powershell
+docker exec node4 curl -s http://localhost:5000/health
 ```
 
 預期回應：
@@ -513,8 +513,8 @@ curl http://localhost:5004/health
 
 回到終端：
 
-```bash
-curl http://localhost:5004/health
+```powershell
+docker exec node4 curl -s http://localhost:5000/health
 ```
 
 預期回應（區塊數已從 1 同步至與其他節點相同）：
@@ -528,14 +528,14 @@ curl http://localhost:5004/health
 
 在瀏覽器任一節點執行一筆轉帳，再確認 node4 也同步到相同區塊數：
 
-```bash
-curl http://localhost:5004/health
+```powershell
+docker exec node4 curl -s http://localhost:5000/health
 ```
 
 **展示結束後清理 node4**
 
-```bash
-docker stop node4 && docker rm node4 && docker volume rm client4_data
+```powershell
+docker stop node4; docker rm node4; docker volume rm client4_data
 ```
 
 ---
