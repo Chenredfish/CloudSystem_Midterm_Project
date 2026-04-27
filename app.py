@@ -71,6 +71,7 @@ def audit(actor: str, action: str, target: str, detail: str = ""):
         "target":    target,
         "detail":    detail,
     })
+    _save_account_state()
 
 
 def _account_state_path() -> str:
@@ -78,7 +79,7 @@ def _account_state_path() -> str:
 
 
 def _load_account_state():
-    """Load ACCOUNT_PASSWORDS and FROZEN_ACCOUNTS from disk on startup."""
+    """Load all in-memory state from disk on startup."""
     path = _account_state_path()
     if not os.path.exists(path):
         return
@@ -88,17 +89,36 @@ def _load_account_state():
         with _accounts_lock:
             ACCOUNT_PASSWORDS.update(data.get("passwords", {}))
             FROZEN_ACCOUNTS.update(data.get("frozen", []))
-        logger.info(f"Account state loaded: {len(ACCOUNT_PASSWORDS)} passwords, {len(FROZEN_ACCOUNTS)} frozen")
+        with _pending_lock:
+            for url in data.get("pending_nodes", []):
+                if url not in PENDING_NODES:
+                    PENDING_NODES.append(url)
+        for entry in data.get("audit_log", []):
+            AUDIT_LOG.append(entry)
+        logger.info(
+            f"Account state loaded: {len(ACCOUNT_PASSWORDS)} passwords, "
+            f"{len(FROZEN_ACCOUNTS)} frozen, {len(PENDING_NODES)} pending, "
+            f"{len(AUDIT_LOG)} audit entries"
+        )
     except Exception as e:
         logger.error(f"Failed to load account state: {e}")
 
 
 def _save_account_state():
-    """Persist current account state to disk."""
+    """Persist all in-memory state to disk."""
     path = _account_state_path()
     try:
         with _accounts_lock:
-            data = {"passwords": dict(ACCOUNT_PASSWORDS), "frozen": list(FROZEN_ACCOUNTS)}
+            passwords = dict(ACCOUNT_PASSWORDS)
+            frozen    = list(FROZEN_ACCOUNTS)
+        with _pending_lock:
+            pending = list(PENDING_NODES)
+        data = {
+            "passwords":    passwords,
+            "frozen":       frozen,
+            "pending_nodes": pending,
+            "audit_log":    list(AUDIT_LOG),
+        }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f)
     except Exception as e:
@@ -513,6 +533,7 @@ def api_nodes_approve():
     with _pending_lock:
         if new_url in PENDING_NODES:
             PENDING_NODES.remove(new_url)
+    _save_account_state()
 
     # Broadcast new node to all existing peers
     for peer in current_peers:
@@ -564,6 +585,7 @@ def nodes_join():
         if url not in PENDING_NODES:
             PENDING_NODES.append(url)
             logger.info(f"Node pending approval: {url}")
+    _save_account_state()
     return jsonify({"status": "pending"})
 
 
