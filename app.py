@@ -1,4 +1,5 @@
 import os
+import hashlib
 import threading
 import logging
 from functools import wraps
@@ -355,6 +356,11 @@ def sync_block():
     existing = read_block(block_num)
     if existing:
         if existing["hash"] == recv_hash:
+            # Content is identical; still update next_hash if peer has one and we don't
+            if next_hash and existing.get("next_hash") != next_hash:
+                write_block_file(block_num, prev_hash, transactions, next_hash)
+                logger.info(f"Updated next_hash for block {block_num}")
+                return jsonify({"status": "updated"}), 200
             return jsonify({"status": "already_exists"}), 200
         # Same chain position but received has more transactions → accept update
         if (existing["prev_hash"] == prev_hash
@@ -467,7 +473,16 @@ def nodes_welcome():
                 r = requests.get(f"{peer}/sync/blocks", timeout=10)
                 blocks = sorted(r.json(), key=lambda b: b["block_num"])
                 for b in blocks:
-                    if not read_block(b["block_num"]):
+                    existing = read_block(b["block_num"])
+                    if not existing:
+                        write_block_file(
+                            b["block_num"], b["prev_hash"],
+                            b["transactions"], b.get("next_hash"),
+                        )
+                    elif (existing["prev_hash"] == b["prev_hash"]
+                          and len(b["transactions"]) > len(existing["transactions"])):
+                        # init_ledger may have created a shorter version of block 1;
+                        # overwrite when peer has more transactions (same prev_hash)
                         write_block_file(
                             b["block_num"], b["prev_hash"],
                             b["transactions"], b.get("next_hash"),
