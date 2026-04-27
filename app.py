@@ -1,4 +1,5 @@
 import os
+import json
 import hashlib
 import threading
 import logging
@@ -70,6 +71,50 @@ def audit(actor: str, action: str, target: str, detail: str = ""):
         "target":    target,
         "detail":    detail,
     })
+
+
+def _account_state_path() -> str:
+    return os.path.join(os.environ.get("LEDGER_PATH", "/storage"), "account_state.json")
+
+
+def _load_account_state():
+    """Load ACCOUNT_PASSWORDS and FROZEN_ACCOUNTS from disk on startup."""
+    path = _account_state_path()
+    if not os.path.exists(path):
+        return
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        with _accounts_lock:
+            ACCOUNT_PASSWORDS.update(data.get("passwords", {}))
+            FROZEN_ACCOUNTS.update(data.get("frozen", []))
+        logger.info(f"Account state loaded: {len(ACCOUNT_PASSWORDS)} passwords, {len(FROZEN_ACCOUNTS)} frozen")
+    except Exception as e:
+        logger.error(f"Failed to load account state: {e}")
+
+
+def _save_account_state():
+    """Persist current account state to disk."""
+    path = _account_state_path()
+    try:
+        with _accounts_lock:
+            data = {"passwords": dict(ACCOUNT_PASSWORDS), "frozen": list(FROZEN_ACCOUNTS)}
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+    except Exception as e:
+        logger.error(f"Failed to save account state: {e}")
+
+
+def _push_account_state_to_peers():
+    """Broadcast current account state to all known peers (background-safe)."""
+    with _accounts_lock:
+        payload = {"passwords": dict(ACCOUNT_PASSWORDS), "frozen": list(FROZEN_ACCOUNTS)}
+    for peer in get_peers():
+        try:
+            requests.post(f"{peer}/sync/account_state", json=payload, timeout=3)
+            logger.info(f"Account state synced to {peer}")
+        except Exception as e:
+            logger.warning(f"Account state sync to {peer} failed: {e}")
 
 
 def get_peers() -> list:
@@ -401,6 +446,29 @@ def sync_block():
 def sync_blocks():
     return jsonify(get_all_blocks())
 
+
+@app.route("/sync/account_state")
+def sync_account_state_get():
+    """Return current account state so peers can pull it."""
+    with _accounts_lock:
+        return jsonify({"passwords": dict(ACCOUNT_PASSWORDS), "frozen": list(FROZEN_ACCOUNTS)})
+
+
+@app.route("/sync/account_state", methods=["POST"])
+def sync_account_state_post():
+    """Receive account state broadcast from a peer; replace local state and persist."""
+    data      = request.json or {}
+    passwords = data.get("passwords", {})
+    frozen    = data.get("frozen", [])
+    with _accounts_lock:
+        ACCOUNT_PASSWORDS.clear()
+        ACCOUNT_PASSWORDS.update(passwords)
+        FROZEN_ACCOUNTS.clear()
+        FROZEN_ACCOUNTS.update(frozen)
+    _save_account_state()
+    logger.info(f"Account state replaced from peer: {len(passwords)} passwords, {len(frozen)} frozen")
+    return jsonify({"status": "ok"})
+
 # ---------------------------------------------------------------------------
 # F1 — Dynamic node management
 # ---------------------------------------------------------------------------
@@ -534,6 +602,8 @@ def api_admin_set_password():
     pw_hash = hashlib.sha256(password.encode()).hexdigest()
     with _accounts_lock:
         ACCOUNT_PASSWORDS[account] = pw_hash
+    _save_account_state()
+    threading.Thread(target=_push_account_state_to_peers, daemon=True).start()
     audit(session["username"], "set_password", account)
     logger.info(f"Password set for account: {account}")
     return jsonify({"status": "ok", "account": account})
@@ -548,6 +618,8 @@ def api_admin_freeze():
         return jsonify({"error": "缺少帳戶名稱"}), 400
     with _accounts_lock:
         FROZEN_ACCOUNTS.add(account)
+    _save_account_state()
+    threading.Thread(target=_push_account_state_to_peers, daemon=True).start()
     audit(session["username"], "freeze", account)
     logger.info(f"Account frozen: {account}")
     return jsonify({"status": "ok", "account": account})
@@ -562,6 +634,8 @@ def api_admin_unfreeze():
         return jsonify({"error": "缺少帳戶名稱"}), 400
     with _accounts_lock:
         FROZEN_ACCOUNTS.discard(account)
+    _save_account_state()
+    threading.Thread(target=_push_account_state_to_peers, daemon=True).start()
     audit(session["username"], "unfreeze", account)
     logger.info(f"Account unfrozen: {account}")
     return jsonify({"status": "ok", "account": account})
@@ -610,6 +684,19 @@ def nodes_welcome():
                             b["transactions"], b.get("next_hash"),
                         )
                 logger.info(f"Full sync from {peer}: {len(blocks)} blocks written")
+                # Also pull account state from the same peer
+                try:
+                    rs = requests.get(f"{peer}/sync/account_state", timeout=5)
+                    state = rs.json()
+                    with _accounts_lock:
+                        ACCOUNT_PASSWORDS.clear()
+                        ACCOUNT_PASSWORDS.update(state.get("passwords", {}))
+                        FROZEN_ACCOUNTS.clear()
+                        FROZEN_ACCOUNTS.update(state.get("frozen", []))
+                    _save_account_state()
+                    logger.info(f"Account state pulled from {peer}")
+                except Exception as ae:
+                    logger.warning(f"Account state pull from {peer} failed: {ae}")
                 return
             except Exception as e:
                 logger.error(f"Full sync from {peer} failed: {e}")
@@ -652,6 +739,7 @@ if __name__ == "__main__":
     logger.info(f"Node {NODE_ID} starting | ledger: {os.environ.get('LEDGER_PATH', '/storage')} | peers: {PEERS}")
     init_ledger()
     logger.info("Ledger initialized")
+    _load_account_state()
 
     admin_url = os.environ.get("ADMIN_URL", "").strip().rstrip("/")
     if admin_url:
