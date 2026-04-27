@@ -45,6 +45,13 @@ CORS(app, supports_credentials=True)
 
 NODE_ID = os.environ.get("NODE_ID", "unknown")
 PEERS = [p.strip() for p in os.environ.get("PEERS", "").split(",") if p.strip()]
+KNOWN_PEERS: list = list(PEERS)   # mutable in-memory; grows dynamically via F1 approve flow
+_peers_lock = threading.Lock()
+
+
+def get_peers() -> list:
+    with _peers_lock:
+        return list(KNOWN_PEERS)
 
 # ---------------------------------------------------------------------------
 # Hardcoded users  (admin: full access, user: transfer/query only)
@@ -81,7 +88,7 @@ def admin_required(f):
 # ---------------------------------------------------------------------------
 def push_block_to_peers(block: dict):
     """Push one block to all peers (runs in background thread)."""
-    for peer in PEERS:
+    for peer in get_peers():
         try:
             r = requests.post(f"{peer}/sync/block", json=block, timeout=3)
             if r.status_code == 409:
@@ -223,12 +230,13 @@ def api_compare():
         for b in local_blocks
     }
 
-    if not PEERS:
+    peers = get_peers()
+    if not peers:
         return jsonify({"error": "此節點未設定任何 peer，無法進行跨節點比對"}), 503
 
     peer_data = {}
     unreachable = []
-    for peer in PEERS:
+    for peer in peers:
         try:
             r = requests.get(f"{peer}/sync/blocks", timeout=5)
             peer_data[peer] = {
@@ -274,15 +282,16 @@ def api_compare():
 def api_repair():
     local_blocks = get_all_blocks()
     all_chains = {"local": {b["block_num"]: b for b in local_blocks}}
+    peers = get_peers()
 
-    for peer in PEERS:
+    for peer in peers:
         try:
             r = requests.get(f"{peer}/sync/blocks", timeout=5)
             all_chains[peer] = {b["block_num"]: b for b in r.json()}
         except Exception as e:
             logger.error(f"Repair: can't reach {peer}: {e}")
 
-    if not PEERS:
+    if not peers:
         return jsonify({"error": "此節點未設定任何 peer，無法進行多數決修復"}), 503
     if len(all_chains) < 2:
         reachable = len(all_chains) - 1  # minus local
@@ -365,6 +374,113 @@ def sync_blocks():
     return jsonify(get_all_blocks())
 
 # ---------------------------------------------------------------------------
+# F1 — Dynamic node management
+# ---------------------------------------------------------------------------
+@app.route("/api/nodes")
+@admin_required
+def api_nodes():
+    """Return known peers with live health info."""
+    nodes_info = []
+    for peer in get_peers():
+        try:
+            r = requests.get(f"{peer}/health", timeout=2)
+            d = r.json()
+            nodes_info.append({
+                "url": peer, "status": "online",
+                "node": d.get("node"), "block_count": d.get("block_count"),
+            })
+        except Exception:
+            nodes_info.append({"url": peer, "status": "offline", "node": None, "block_count": None})
+    return jsonify({"nodes": nodes_info})
+
+
+@app.route("/api/nodes/approve", methods=["POST"])
+@admin_required
+def api_nodes_approve():
+    """Admin approves a new node URL; broadcasts to peers and welcomes the new node."""
+    data = request.json or {}
+    new_url = data.get("url", "").strip().rstrip("/")
+    if not new_url:
+        return jsonify({"error": "缺少節點 URL"}), 400
+
+    with _peers_lock:
+        if new_url in KNOWN_PEERS:
+            return jsonify({"error": "該節點已在 peer 名單中"}), 409
+        KNOWN_PEERS.append(new_url)
+        current_peers = list(KNOWN_PEERS)
+
+    # Broadcast new node to all existing peers
+    for peer in current_peers:
+        if peer == new_url:
+            continue
+        try:
+            requests.post(f"{peer}/nodes/notify", json={"url": new_url}, timeout=3)
+        except Exception as e:
+            logger.warning(f"Notify {peer} of new node failed: {e}")
+
+    # Send complete peer list + self URL to new node so it can sync
+    self_url = f"http://{NODE_ID}:5000"
+    welcome_peers = [p for p in current_peers if p != new_url] + [self_url]
+    try:
+        requests.post(f"{new_url}/nodes/welcome", json={"peers": welcome_peers}, timeout=10)
+    except Exception as e:
+        logger.error(f"Welcome to {new_url} failed: {e}")
+        return jsonify({"error": f"節點 {new_url} 無法連線", "detail": str(e)}), 503
+
+    logger.info(f"Approved new node: {new_url}")
+    return jsonify({"status": "ok", "url": new_url, "known_peers": current_peers})
+
+
+@app.route("/nodes/notify", methods=["POST"])
+def nodes_notify():
+    """Internal broadcast: a peer was added; update local KNOWN_PEERS."""
+    data = request.json or {}
+    url = data.get("url", "").strip().rstrip("/")
+    if not url:
+        return jsonify({"error": "缺少 url"}), 400
+    with _peers_lock:
+        if url not in KNOWN_PEERS:
+            KNOWN_PEERS.append(url)
+    logger.info(f"Peer added via notify: {url}")
+    return jsonify({"status": "ok"})
+
+
+@app.route("/nodes/welcome", methods=["POST"])
+def nodes_welcome():
+    """New node receives full peer list; initialises KNOWN_PEERS and syncs chain."""
+    data = request.json or {}
+    peers = data.get("peers", [])
+    self_url = f"http://{NODE_ID}:5000"
+
+    with _peers_lock:
+        KNOWN_PEERS.clear()
+        for p in peers:
+            p = p.strip().rstrip("/")
+            if p and p != self_url and p not in KNOWN_PEERS:
+                KNOWN_PEERS.append(p)
+
+    logger.info(f"Welcome received; peers now: {get_peers()}")
+
+    def _full_sync():
+        for peer in get_peers():
+            try:
+                r = requests.get(f"{peer}/sync/blocks", timeout=10)
+                blocks = sorted(r.json(), key=lambda b: b["block_num"])
+                for b in blocks:
+                    if not read_block(b["block_num"]):
+                        write_block_file(
+                            b["block_num"], b["prev_hash"],
+                            b["transactions"], b.get("next_hash"),
+                        )
+                logger.info(f"Full sync from {peer}: {len(blocks)} blocks written")
+                return
+            except Exception as e:
+                logger.error(f"Full sync from {peer} failed: {e}")
+
+    threading.Thread(target=_full_sync, daemon=True).start()
+    return jsonify({"status": "ok", "peers": get_peers()})
+
+# ---------------------------------------------------------------------------
 # React static serve (activated after npm run build)
 # ---------------------------------------------------------------------------
 _REACT_BUILD = os.path.join(os.path.dirname(__file__), "frontend", "build")
@@ -372,7 +488,7 @@ _REACT_BUILD = os.path.join(os.path.dirname(__file__), "frontend", "build")
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def serve_react(path):
-    if path.startswith("api/") or path.startswith("sync/") or path == "health":
+    if path.startswith("api/") or path.startswith("sync/") or path.startswith("nodes/") or path == "health":
         return jsonify({"error": "Not found"}), 404
     if os.path.exists(_REACT_BUILD):
         target = os.path.join(_REACT_BUILD, path)

@@ -10,12 +10,14 @@ import SendIcon from '@mui/icons-material/Send';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import LogoutIcon from '@mui/icons-material/Logout';
+import HubIcon from '@mui/icons-material/Hub';
 
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Transfer from './pages/Transfer';
 import Balance from './pages/Balance';
 import Verify from './pages/Verify';
+import Nodes from './pages/Nodes';
 import api from './api';
 
 const DRAWER_WIDTH = 220;
@@ -25,10 +27,11 @@ const theme = createTheme({
 });
 
 const NAV_ITEMS = [
-  { label: '帳本總覽', path: '/dashboard', icon: <DashboardIcon /> },
-  { label: '執行轉帳', path: '/transfer',  icon: <SendIcon /> },
-  { label: '餘額查詢', path: '/balance',   icon: <AccountBalanceWalletIcon /> },
-  { label: '驗證 / 修復', path: '/verify', icon: <VerifiedIcon /> },
+  { label: '帳本總覽',   path: '/dashboard', icon: <DashboardIcon /> },
+  { label: '執行轉帳',   path: '/transfer',  icon: <SendIcon /> },
+  { label: '餘額查詢',   path: '/balance',   icon: <AccountBalanceWalletIcon /> },
+  { label: '驗證 / 修復', path: '/verify',   icon: <VerifiedIcon /> },
+  { label: '節點管理',   path: '/nodes',     icon: <HubIcon />, adminOnly: true },
 ];
 
 function Layout({ user, onLogout }) {
@@ -61,7 +64,7 @@ function Layout({ user, onLogout }) {
       }}>
         <Toolbar />
         <List>
-          {NAV_ITEMS.map(item => (
+          {NAV_ITEMS.filter(item => !item.adminOnly || user.role === 'admin').map(item => (
             <ListItemButton
               key={item.path}
               selected={location.pathname === item.path}
@@ -82,6 +85,7 @@ function Layout({ user, onLogout }) {
           <Route path="/transfer"  element={<Transfer />} />
           <Route path="/balance"   element={<Balance />} />
           <Route path="/verify"    element={<Verify role={user.role} />} />
+          <Route path="/nodes"     element={<Nodes />} />
           <Route path="*"          element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Box>
